@@ -28,3 +28,12 @@ jobs:
 
     - name: 렉서 테스트
       run: make test
+
+    - name: 빌드 결과물 업로드
+      uses: actions/upload-artifact@v4
+      with:
+        name: kcode-binaries
+        path: |
+          kcode
+          kcode_gen
+          kbc
