@@ -1,1 +1,30 @@
+name: Kcode Build
 
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 소스 체크아웃
+      uses: actions/checkout@v4
+
+    - name: gcc 설치 확인
+      run: gcc --version
+
+    - name: 인터프리터 빌드
+      run: make interp
+
+    - name: C 생성기 빌드
+      run: make gen
+
+    - name: 바이트코드 VM 빌드
+      run: make kvm
+
+    - name: 렉서 테스트
+      run: make test
