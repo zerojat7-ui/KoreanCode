@@ -17,9 +17,6 @@ jobs:
     - name: gcc 설치 확인
       run: gcc --version
 
-    - name: 인터프리터 빌드
-      run: make interp
-
     - name: C 생성기 빌드
       run: make gen
 
@@ -34,6 +31,5 @@ jobs:
       with:
         name: kcode-binaries
         path: |
-          kcode
           kcode_gen
           kbc
