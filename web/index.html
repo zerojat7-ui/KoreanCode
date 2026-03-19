@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kcode — 한국어 프로그래밍 언어</title>
+<style>
+  :root {
+    --bg:     #02050c;
+    --teal:   #00d4ff;
+    --tglow:  rgba(0,212,255,0.35);
+    --green:  #00e890;
+    --dim:    #3a6a8a;
+    --mute:   #182a3a;
+    --border: rgba(0,212,255,0.13);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: #c0e8f8;
+    font-family: 'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* 배경 */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      radial-gradient(ellipse at 50% 40%, rgba(0,100,160,0.1) 0%, transparent 60%),
+      repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(0,212,255,0.02) 28px),
+      repeating-linear-gradient(90deg, transparent, transparent 27px, rgba(0,212,255,0.02) 28px);
+    pointer-events: none;
+  }
+
+  .wrap {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 32px;
+    animation: fadeUp .65s ease both;
+  }
+
+  /* ── 로고 이미지 ── */
+  .logo-img-wrap {
+    position: relative;
+    width: 220px; height: 160px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* 배경 글로우 */
+  .logo-img-wrap::before {
+    content: '';
+    position: absolute;
+    width: 200px; height: 130px;
+    background: radial-gradient(ellipse, rgba(0,212,255,0.08) 0%, transparent 70%);
+    filter: blur(18px);
+    z-index: 0;
+  }
+
+  .logo-img {
+    position: relative; z-index: 1;
+    width: 210px;
+    object-fit: contain;
+    filter:
+      drop-shadow(0 0 18px rgba(0,212,255,0.25))
+      drop-shadow(0 0 6px rgba(0,212,255,0.15));
+    animation: float 4s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50%     { transform: translateY(-6px); }
+  }
+
+  /* 서브 텍스트 */
+  .logo-sub {
+    font-size: 13px; color: var(--dim);
+    letter-spacing: 2px;
+    margin-top: -16px;
+  }
+
+  /* 상태 뱃지 */
+  .status-row {
+    display: flex; gap: 10px;
+    flex-wrap: wrap; justify-content: center;
+  }
+  .badge {
+    display: flex; align-items: center; gap: 7px;
+    padding: 5px 15px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 11.5px; color: var(--dim);
+    font-family: 'Consolas', monospace;
+    transition: all .3s;
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--mute); flex-shrink: 0;
+    transition: all .3s;
+  }
+  .badge.ok   { border-color: rgba(0,232,144,0.3); color: var(--green); }
+  .badge.ok   .dot { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+  .badge.warn { border-color: rgba(0,212,255,0.2); color: var(--teal); }
+  .badge.warn .dot { background: var(--teal); box-shadow: 0 0 8px var(--teal); }
+
+  @keyframes pulse {
+    0%,100%{ opacity:1; transform:scale(1); }
+    50%    { opacity:.4; transform:scale(1.5); }
+  }
+
+  /* WASM 로딩 바 */
+  .loader {
+    width: 240px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .loader-label {
+    display: flex; justify-content: space-between;
+    font-size: 10.5px; color: var(--mute);
+    font-family: 'Consolas', monospace;
+  }
+  .bar-bg {
+    height: 3px; background: var(--mute);
+    border-radius: 2px; overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #005566, var(--teal));
+    border-radius: 2px; width: 0%;
+    transition: width .3s ease;
+    box-shadow: 0 0 8px var(--tglow);
+  }
+
+  /* 실행 버튼 */
+  .btn-launch {
+    padding: 15px 56px;
+    background: linear-gradient(135deg, #004d1f, #00882e);
+    border: 2px solid #00cc55;
+    border-radius: 12px;
+    color: #00ff77;
+    font-size: 16px; font-weight: 900;
+    cursor: pointer; outline: none;
+    font-family: inherit; letter-spacing: 1px;
+    box-shadow: 0 0 28px rgba(0,180,80,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+    transition: all .2s;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .btn-launch:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0 44px rgba(0,220,80,0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+  }
+  .btn-launch:active { transform: translateY(0); }
+
+  .ver {
+    font-size: 11px; color: var(--mute);
+    font-family: 'Consolas', monospace; letter-spacing: .5px;
+  }
+
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(22px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+
+  @media (max-width:480px) {
+    .logo-img { width: 170px; }
+    .btn-launch { padding: 13px 40px; font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- 로고 이미지 -->
+  <div class="logo-img-wrap">
+    <img class="logo-img"
+         src="assets/logo.png"
+         alt="Kcode 로고"
+         onerror="this.style.display='none'; document.getElementById('logo-fallback').style.display='flex'">
+  </div>
+
+  <!-- 이미지 없을 때 폴백 -->
+  <div id="logo-fallback" style="
+    display:none; flex-direction:column; align-items:center; gap:10px;
+    margin-top:-10px;
+  ">
+    <div style="
+      width:64px; height:64px;
+      background:linear-gradient(135deg,#003d5c,#006699);
+      border:2px solid var(--teal); border-radius:16px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:28px; font-weight:900; color:var(--teal);
+      box-shadow:0 0 28px var(--tglow);
+    ">K</div>
+    <div style="font-size:26px;font-weight:900;color:var(--teal);letter-spacing:5px;text-shadow:0 0 18px var(--tglow)">KCODE</div>
+  </div>
+
+  <div class="logo-sub">한국어 프로그래밍 언어</div>
+
+  <!-- 상태 -->
+  <div class="status-row">
+    <div class="badge" id="s-wasm">
+      <div class="dot"></div>
+      <span id="t-wasm">WASM 로딩 중...</span>
+    </div>
+    <div class="badge" id="s-ks">
+      <div class="dot"></div>
+      <span id="t-ks">kserver 확인 중...</span>
+    </div>
+  </div>
+
+  <!-- 로딩 바 -->
+  <div class="loader">
+    <div class="loader-label">
+      <span id="load-label">kcode_vm.wasm</span>
+      <span id="load-pct">0%</span>
+    </div>
+    <div class="bar-bg"><div class="bar-fill" id="wasm-bar"></div></div>
+  </div>
+
+  <!-- 실행 버튼 -->
+  <button class="btn-launch" onclick="openIDE()">
+    ▶ &nbsp;IDE 실행
+  </button>
+
+  <div class="ver">v0.1.0</div>
+
+</div>
+
+<script>
+  async function init() {
+    const bar = document.getElementById('wasm-bar');
+    const pct = document.getElementById('load-pct');
+    const lbl = document.getElementById('load-label');
+
+    let p = 0;
+    const tick = setInterval(() => {
+      p = Math.min(p + Math.random() * 14, 90);
+      bar.style.width = p + '%';
+      pct.textContent = Math.floor(p) + '%';
+    }, 100);
+
+    // WASM
+    let wasmOk = false;
+    try {
+      if (typeof KcodeVM !== 'undefined') {
+        await KcodeVM({ locateFile: f => `wasm/${f}` });
+        wasmOk = true;
+      }
+    } catch(e) {}
+
+    clearInterval(tick);
+    bar.style.width = '100%';
+    pct.textContent = '100%';
+
+    const sw = document.getElementById('s-wasm');
+    const tw = document.getElementById('t-wasm');
+    if (wasmOk) {
+      sw.className = 'badge ok'; tw.textContent = 'WASM 준비됨';
+      lbl.textContent = '✓ kcode_vm.wasm';
+    } else {
+      sw.className = 'badge warn'; tw.textContent = 'WASM 대기';
+    }
+
+    // kserver
+    let ksOk = false;
+    try {
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), 600);
+      const res = await fetch('http://localhost:8080/health', { signal: ctrl.signal });
+      ksOk = res.ok;
+    } catch(_) {}
+
+    const sk = document.getElementById('s-ks');
+    const tk = document.getElementById('t-ks');
+    sk.className = ksOk ? 'badge ok' : 'badge';
+    tk.textContent = ksOk ? 'kserver 연결됨' : 'kserver 없음';
+  }
+
+  function openIDE() {
+    window.location.href = 'ide.html';
+  }
+
+  init();
+</script>
+
+<script src="wasm/kcode_vm.js" onerror="console.warn('kcode_vm.js 없음')"></script>
+</body>
+</html>
