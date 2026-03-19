@@ -1,0 +1,6 @@
+# Kcode 언어 파일 하이라이팅
+*.han linguist-language=Python
+*.hg  linguist-language=Python
+
+# 마스터 헌법 파일
+*.mc  linguist-language=JSON
