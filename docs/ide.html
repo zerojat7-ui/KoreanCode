@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KCODE IDE v1.3.0</title>
+<link rel="stylesheet" href="ide.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     TOP BAR
+════════════════════════════════════════ -->
+<div id="top">
+  <div class="logo-wrap">
+    <img class="logo-img" src="assets/logo.PNG" alt="Kcode"
+      onerror="this.style.display='none';document.getElementById('logo-fb').style.display='flex';">
+    <div id="logo-fb">K</div>
+    <div>
+      <span class="logo-title">KCODE</span>
+      <span class="logo-ver">v1.3.0</span>
+    </div>
+  </div>
+
+  <!-- 메뉴 -->
+  <div id="menus"></div>
+
+  <!-- 모드 토글 -->
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="mb" onclick="setMode('block')">⬡ 블록</button>
+    <button class="mode-btn"        id="mt" onclick="setMode('text')"> ✎ 텍스트</button>
+  </div>
+
+  <div style="flex:1"></div>
+
+  <!-- 툴바 버튼 -->
+  <div style="display:flex;gap:4px;align-items:center;">
+    <button class="top-btn">📄 새 파일</button>
+    <button class="top-btn">💾 저장</button>
+    <button class="top-btn">📂 열기</button>
+    <div style="width:1px;height:18px;background:var(--border);margin:0 3px;"></div>
+    <button class="run-btn" id="run-btn" onclick="handleRun()">▶ 실행</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     BODY
+════════════════════════════════════════ -->
+<div id="body">
+
+  <!-- LEFT: 블록 팔레트 -->
+  <div id="left">
+    <div class="panel-hdr">
+      <span style="color:var(--teal);font-size:10px;">⬡</span>
+      <span class="panel-hdr-title">블록 팔레트</span>
+    </div>
+    <div id="block-list"></div>
+  </div>
+
+  <!-- 리사이즈 핸들: 팔레트 ↔ 워크스페이스 -->
+  <div class="resize-handle-v" data-target="left" data-dir="right"></div>
+
+  <!-- WORKSPACE -->
+  <div id="workspace">
+
+    <!-- 블록 모드 캔버스 -->
+    <div id="canvas" onclick="clearSel(event)"></div>
+
+    <!-- 텍스트 모드 에디터 -->
+    <div id="text-editor">
+      <div class="text-hint">
+        // .han 파일 — Kcode 텍스트 편집 모드 &nbsp;|&nbsp; 저장: Ctrl+S
+      </div>
+      <textarea id="text-area" spellcheck="false"
+        placeholder="// Kcode 코드를 직접 입력하세요
+// 예)
+함수 안녕():
+    출력(&quot;안녕하세요&quot;)
+
+안녕()"></textarea>
+    </div>
+
+    <!-- 리사이즈 핸들: 워크스페이스 ↔ 아웃라인 (블록 모드만 표시) -->
+    <div class="resize-handle-v" id="outline-resize" data-target="outline" data-dir="left"></div>
+
+    <!-- 코드 아웃라인 (블록 모드만 표시) -->
+    <div id="outline">
+      <div class="panel-hdr">
+        <span style="color:var(--teal);font-size:9px;">≡</span>
+        <span class="panel-hdr-title">코드 아웃라인</span>
+      </div>
+      <div class="outline-list" id="outline-list"></div>
+    </div>
+
+  </div><!-- /workspace -->
+
+  <!-- RIGHT SIDE: 속성 + AI -->
+  <div id="right-side">
+
+    <!-- 리사이즈 핸들: 워크스페이스 ↔ 우측패널 -->
+    <div class="resize-handle-v" style="position:absolute;left:0;top:0;height:100%;z-index:20;"
+         data-target="right-side" data-dir="left"></div>
+
+    <div id="right-top">
+
+      <!-- 블록 속성 패널 (블록 모드만 표시) -->
+      <div id="right">
+        <div class="panel-hdr">
+          <span style="color:var(--teal);font-size:9px;">⚙</span>
+          <span class="panel-hdr-title">블록 속성</span>
+        </div>
+        <div id="props">
+          <div class="prop-empty">블록을 선택하세요</div>
+        </div>
+      </div>
+
+      <!-- 리사이즈 핸들: 속성 ↔ AI -->
+      <div class="resize-handle-v" data-target="right" data-dir="right"></div>
+
+      <!-- AI 대화창 -->
+      <div id="ai-panel">
+        <div id="ai-hdr">
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div class="ai-dot"></div>
+            <span class="ai-title">K-AI</span>
+          </div>
+          <span class="ai-badge">Claude</span>
+        </div>
+        <div id="ai-msgs"></div>
+        <div id="ai-quick"></div>
+        <div id="ai-input-row">
+          <textarea id="ai-input" placeholder="Kcode에 대해 물어보세요..."></textarea>
+          <button class="ai-send" onclick="aiSend()">전송</button>
+        </div>
+      </div>
+
+    </div><!-- /right-top -->
+  </div><!-- /right-side -->
+
+</div><!-- /body -->
+
+<!-- ═══════════════════════════════════════
+     BOTTOM PANEL
+════════════════════════════════════════ -->
+
+<!-- 하단 리사이즈 핸들 -->
+<div class="resize-handle-h" id="bottom-resize"></div>
+
+<div id="bottom">
+  <div id="tab-bar">
+    <div id="tabs"></div>
+    <div style="flex:1"></div>
+    <div class="err-badge">
+      <div class="err-dot"></div>
+      <span class="err-lbl">오류 1</span>
+      <div class="err-cnt">1</div>
+    </div>
+  </div>
+  <div id="tab-content"></div>
+</div>
+
+<script src="ide.js"></script>
+</body>
+</html>
