@@ -38,7 +38,7 @@ input,textarea{font-family:inherit;}
 .mbtn:hover{border-color:var(--cyan);color:var(--txt);}
 .mbtn.active{background:#0a2030;border-color:var(--cyan);color:var(--cyan);}
 #run-btn{
-  margin-left:auto;padding:5px 16px;
+  padding:5px 16px;
   background:linear-gradient(135deg,#003828,#002a20);
   border:1px solid #00e89055;color:var(--green);border-radius:4px;
   font-size:11.5px;font-weight:700;transition:.15s;
@@ -47,6 +47,10 @@ input,textarea{font-family:inherit;}
 #run-btn:hover{background:linear-gradient(135deg,#004838,#003428);box-shadow:0 0 14px #00e89035;}
 #run-btn:disabled{opacity:.5;cursor:default;}
 #run-btn.running{color:var(--orange);border-color:#ff6b3555;text-shadow:0 0 8px var(--orange);}
+#file-btns{display:flex;gap:4px;margin-left:auto;}
+.fbtn{padding:4px 10px;background:var(--bg3);border:1px solid var(--b2);color:var(--mid);border-radius:3px;font-size:11px;transition:.15s;white-space:nowrap;}
+.fbtn:hover{border-color:var(--cyan);color:var(--cyan);}
+
 #wasm-badge{
   font-size:10px;color:var(--dim);padding:2px 9px;
   border:1px solid var(--b1);border-radius:10px;display:flex;align-items:center;gap:5px;
@@ -117,8 +121,6 @@ input,textarea{font-family:inherit;}
 /* ── 리사이즈 핸들 ── */
 .rv{width:4px;background:var(--b1);cursor:col-resize;flex-shrink:0;transition:.15s;}
 .rv:hover,.rv.drag{background:var(--cyan);}
-#bot-resize{height:4px;background:var(--b1);cursor:row-resize;flex-shrink:0;transition:.15s;}
-#bot-resize:hover,#bot-resize.drag{background:var(--cyan);}
 
 /* ── 아웃라인 ── */
 #outline{
@@ -154,7 +156,8 @@ input,textarea{font-family:inherit;}
   border-radius:3px;padding:4px 7px;font-size:11px;color:var(--txt);
   outline:none;font-family:monospace;transition:.15s;
 }
-.prp-div{border-top:1px solid var(--b1);margin:8px 0;}
+.prp-del{width:100%;padding:5px;background:#1a0808;border:1px solid var(--red)44;color:var(--red);border-radius:3px;font-size:11px;margin-top:6px;transition:.15s;}
+.prp-del:hover{background:var(--red);color:#fff;border-color:var(--red);}
 .prp-uid{display:flex;justify-content:space-between;font-size:9px;color:var(--dim);padding:2px 0;}
 
 /* ── AI 패널 ── */
@@ -293,9 +296,16 @@ input,textarea{font-family:inherit;}
 
 /* ── 하단 ── */
 #bottom{
-  height:var(--botH);min-height:60px;background:var(--panel);
+  height:var(--botH);min-height:60px;max-height:70vh;background:var(--panel);
   border-top:1px solid var(--b1);display:flex;flex-direction:column;flex-shrink:0;
+  overflow:hidden;
 }
+#bot-resize{
+  height:5px;background:var(--b1);cursor:row-resize;flex-shrink:0;
+  transition:.15s;border-top:1px solid var(--b1);
+}
+#bot-resize:hover,#bot-resize.drag{background:var(--cyan);box-shadow:0 0 6px var(--cyan)44;}
+
 #tabs{
   display:flex;align-items:center;background:#060a14;
   border-bottom:1px solid var(--b1);padding:0 8px;gap:2px;flex-shrink:0;
@@ -361,6 +371,12 @@ input,textarea{font-family:inherit;}
       <button id="mt" class="mbtn"        onclick="setMode('text')">≡ 텍스트</button>
     </div>
     <button id="run-btn" onclick="handleRun()">▶ 실행</button>
+    <div id="file-btns">
+      <button class="fbtn" onclick="newFile()" title="새 파일 (Ctrl+N)">□ 새 파일</button>
+      <button class="fbtn" onclick="saveFile()" title="저장 (Ctrl+S)">↓ 저장</button>
+      <button class="fbtn" onclick="document.getElementById('file-open-inp').click()" title="열기 (Ctrl+O)">↑ 열기</button>
+    </div>
+    <input id="file-open-inp" type="file" accept=".han,.txt,.kcode" style="display:none" onchange="openFile(event)">
     <div id="wasm-badge">
       <span id="wasm-dot"></span>
       <span id="wasm-txt">WASM 로딩...</span>
@@ -979,8 +995,85 @@ function setMode(mode){
 }
 
 /* ================================================================
-   렌더 함수들
+   파일 관리 — 새 파일 / 저장 / 열기
    ================================================================ */
+function newFile(){
+  if(ws.length>0){
+    if(!confirm('현재 작업을 모두 지우고 새 파일을 만드시겠습니까?'))return;
+  }
+  ws=[];selUid=null;consoleLog=[];errLog=[];
+  const ta=document.getElementById('text-area');
+  if(ta)ta.value='';
+  renderAll();
+  consoleLog.push({t:'info',s:'□ 새 파일'});
+  renderTabContent();
+}
+
+function saveFile(){
+  let content='';
+  let filename='main.han';
+  if(editorMode==='text'){
+    content=document.getElementById('text-area').value||'';
+  }else{
+    content=ws.map(b=>blockToHan(b,0)).join('');
+  }
+  const blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  consoleLog.push({t:'info',s:`↓ 저장: ${filename}`});
+  renderTabContent();
+}
+
+function openFile(e){
+  const file=e.target.files?.[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const content=ev.target.result||'';
+    /* 텍스트 모드로 전환하여 내용 표시 */
+    setMode('text');
+    document.getElementById('text-area').value=content;
+    consoleLog.push({t:'info',s:`↑ 열기: ${file.name}`});
+    renderTabContent();
+  };
+  reader.readAsText(file,'UTF-8');
+  e.target.value=''; /* 같은 파일 재선택 가능하도록 초기화 */
+}
+
+/* ================================================================
+   블록 삭제
+   ================================================================ */
+function deleteBlock(uid){
+  function remove(bls){return bls.filter(b=>b.uid!==uid).map(b=>({...b,children:remove(b.children||[])}));}
+  ws=remove(ws);
+  selUid=null;
+  renderAll();
+}
+
+/* ================================================================
+   키보드 단축키
+   ================================================================ */
+document.addEventListener('keydown',e=>{
+  const tag=document.activeElement?.tagName;
+  const isInput=tag==='INPUT'||tag==='TEXTAREA';
+
+  /* 블록 삭제: Delete / Backspace (입력창 제외) */
+  if(!isInput&&(e.key==='Delete'||e.key==='Backspace')&&selUid!=null){
+    e.preventDefault();
+    deleteBlock(selUid);
+    return;
+  }
+  /* Ctrl+N: 새 파일 */
+  if(e.ctrlKey&&e.key==='n'){e.preventDefault();newFile();return;}
+  /* Ctrl+S: 저장 */
+  if(e.ctrlKey&&e.key==='s'){e.preventDefault();saveFile();return;}
+  /* Ctrl+O: 열기 */
+  if(e.ctrlKey&&e.key==='o'){e.preventDefault();document.getElementById('file-open-inp').click();return;}
+  /* ESC: 선택 해제 */
+  if(!isInput&&e.key==='Escape'){selUid=null;renderAll();return;}
+});
 function renderMenus(){
   const el=document.getElementById('menus');
   el.style.cssText='display:flex;align-items:center;';el.innerHTML='';
@@ -1103,6 +1196,11 @@ function renderProps(){
   const dv=document.createElement('div');dv.className='prp-div';el.appendChild(dv);
   const uid=document.createElement('div');uid.className='prp-uid';
   uid.innerHTML=`<span>uid</span><span style="color:var(--dim);">#${sb.uid}</span>`;el.appendChild(uid);
+  /* 삭제 버튼 */
+  const del=document.createElement('button');del.className='prp-del';
+  del.textContent='✕ 블록 삭제';
+  del.onclick=()=>deleteBlock(sb.uid);
+  el.appendChild(del);
 }
 
 function renderAI(){
@@ -1448,13 +1546,31 @@ function initResize(){
   const bh=document.getElementById('bot-resize');
   if(bh){
     let startY,startH;
-    bh.addEventListener('mousedown',e=>{
-      startY=e.clientY;startH=document.getElementById('bottom').getBoundingClientRect().height;
-      bh.classList.add('drag');document.body.style.cursor='row-resize';document.body.style.userSelect='none';
-      const onMove=e=>{const delta=startY-e.clientY;const newH=Math.max(60,Math.min(window.innerHeight*0.65,startH+delta));document.getElementById('bottom').style.height=newH+'px';};
-      const onUp=()=>{bh.classList.remove('drag');document.body.style.cursor='';document.body.style.userSelect='';document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);};
-      document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
-    });
+    const startDrag=e=>{
+      e.preventDefault();
+      startY=e.clientY??(e.touches?.[0]?.clientY);
+      startH=document.getElementById('bottom').getBoundingClientRect().height;
+      bh.classList.add('drag');
+      document.body.style.cursor='row-resize';
+      document.body.style.userSelect='none';
+    };
+    const onMove=e=>{
+      const y=e.clientY??(e.touches?.[0]?.clientY);
+      const delta=startY-y;
+      const newH=Math.max(60,Math.min(window.innerHeight*0.70,startH+delta));
+      document.getElementById('bottom').style.height=newH+'px';
+    };
+    const onUp=()=>{
+      bh.classList.remove('drag');
+      document.body.style.cursor='';
+      document.body.style.userSelect='';
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+      document.removeEventListener('touchmove',onMove);
+      document.removeEventListener('touchend',onUp);
+    };
+    bh.addEventListener('mousedown',e=>{startDrag(e);document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);});
+    bh.addEventListener('touchstart',e=>{startDrag(e);document.addEventListener('touchmove',onMove,{passive:false});document.addEventListener('touchend',onUp);},{passive:false});
   }
 }
 
