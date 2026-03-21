@@ -163,6 +163,19 @@ input,textarea{font-family:inherit;}
   background:#080c18;border-left:1px solid var(--b1);
   display:flex;flex-direction:column;overflow:hidden;
 }
+#ai-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:5px 10px;border-bottom:1px solid var(--b1);flex-shrink:0;
+}
+#ai-header .ph{border:none;padding:0;font-size:9.5px;}
+#ai-sel-btn{
+  display:flex;align-items:center;gap:5px;padding:3px 9px;
+  border-radius:12px;border:1px solid var(--b2);background:var(--bg3);
+  cursor:pointer;transition:.15s;font-size:10px;
+}
+#ai-sel-btn:hover{border-color:var(--purple);color:var(--purple);}
+#ai-sel-dot{width:6px;height:6px;border-radius:50%;}
+#ai-sel-name{color:var(--txt);font-size:10px;font-weight:600;}
 #ai-msgs{flex:1;overflow-y:auto;padding:8px;}
 .ai-msg{margin-bottom:7px;}
 .ai-msg.usr{text-align:right;}
@@ -201,6 +214,79 @@ input,textarea{font-family:inherit;}
 .ai-dot:nth-child(2){animation-delay:.2s;}
 .ai-dot:nth-child(3){animation-delay:.4s;}
 @keyframes blink{0%,100%{opacity:.2}50%{opacity:1}}
+
+/* ── AI 선택 모달 ── */
+#ai-modal-bg{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);
+  z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(4px);
+}
+#ai-modal-bg.open{display:flex;}
+#ai-modal{
+  background:#0d1525;border:1px solid var(--b2);border-radius:12px;
+  width:480px;max-width:96vw;max-height:90vh;overflow-y:auto;
+  box-shadow:0 0 60px rgba(0,0,0,.8),0 0 30px rgba(0,100,200,.15);
+}
+#ai-modal-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px;border-bottom:1px solid var(--b1);
+}
+#ai-modal-hd h3{font-size:14px;color:var(--txt);font-weight:700;}
+#ai-modal-close{
+  width:26px;height:26px;background:var(--bg3);border:1px solid var(--b2);
+  border-radius:4px;color:var(--dim);font-size:16px;cursor:pointer;transition:.15s;
+}
+#ai-modal-close:hover{color:var(--red);border-color:var(--red);}
+#ai-provider-list{display:flex;flex-direction:column;gap:6px;padding:14px 16px;}
+.ai-provider-card{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;
+  border-radius:8px;border:1px solid var(--b2);background:var(--bg3);
+  cursor:pointer;transition:.15s;position:relative;
+}
+.ai-provider-card:hover{border-color:#ffffff22;background:#151e30;}
+.ai-provider-card.selected{border-color:var(--purple);background:#1a1030;}
+.ai-prov-icon{
+  width:36px;height:36px;border-radius:8px;display:flex;align-items:center;
+  justify-content:center;font-size:18px;flex-shrink:0;font-weight:800;
+}
+.ai-prov-info{flex:1;}
+.ai-prov-name{font-size:13px;font-weight:700;color:var(--txt);}
+.ai-prov-desc{font-size:10px;color:var(--dim);margin-top:2px;}
+.ai-prov-badge{
+  padding:2px 8px;border-radius:10px;font-size:9px;font-weight:600;
+  background:var(--b1);color:var(--mid);
+}
+.ai-prov-badge.ok{background:#0a2a1a;color:var(--green);}
+.ai-prov-badge.need{background:#1a1a08;color:var(--yellow);}
+/* 키 입력 영역 */
+.ai-key-area{
+  display:none;padding:10px 14px 14px;margin:0 16px 10px;
+  background:var(--bg2);border:1px solid var(--b2);border-radius:8px;
+}
+.ai-key-area.open{display:block;}
+.ai-key-area label{font-size:10px;color:var(--dim);display:block;margin-bottom:5px;}
+.ai-key-row{display:flex;gap:6px;}
+.ai-key-inp{
+  flex:1;background:var(--bg3);border:1px solid var(--b2);border-radius:4px;
+  padding:6px 9px;color:var(--txt);font-size:11px;outline:none;font-family:monospace;
+}
+.ai-key-inp:focus{border-color:var(--purple);}
+.ai-key-save{
+  padding:5px 14px;background:#1a1030;border:1px solid var(--purple);
+  color:var(--purple);border-radius:4px;font-size:11px;font-weight:600;transition:.15s;
+}
+.ai-key-save:hover{background:var(--purple);color:#fff;}
+.ai-key-status{font-size:9.5px;margin-top:5px;min-height:14px;}
+/* 기타 AI 이름 입력 */
+.ai-custom-row{display:flex;gap:6px;margin-bottom:6px;}
+.ai-custom-inp{
+  flex:1;background:var(--bg3);border:1px solid var(--b2);border-radius:4px;
+  padding:6px 9px;color:var(--txt);font-size:11px;outline:none;
+}
+.ai-custom-inp:focus{border-color:var(--orange);}
+.ai-modal-footer{
+  padding:10px 16px 16px;border-top:1px solid var(--b1);
+  display:flex;justify-content:flex-end;gap:8px;margin-top:4px;
+}
 
 /* ── 하단 ── */
 #bottom{
@@ -311,12 +397,133 @@ input,textarea{font-family:inherit;}
 
     <!-- AI 패널 -->
     <div id="ai-panel">
-      <div class="ph">🤖 K-AI</div>
+      <div id="ai-header">
+        <div class="ph">🤖 K-AI</div>
+        <button id="ai-sel-btn" onclick="openAIModal()">
+          <span id="ai-sel-dot" style="background:#aa55ff;box-shadow:0 0 6px #aa55ff;"></span>
+          <span id="ai-sel-name">Claude</span>
+          <span style="color:var(--dim);font-size:9px;">▼</span>
+        </button>
+      </div>
       <div id="ai-msgs"></div>
       <div id="ai-quick"></div>
       <div id="ai-inp-row">
         <textarea id="ai-input" rows="2" placeholder="질문..."></textarea>
         <button id="ai-send" onclick="aiSend()">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ AI 선택 모달 ════ -->
+  <div id="ai-modal-bg" onclick="e=>e.target.id==='ai-modal-bg'&&closeAIModal()">
+    <div id="ai-modal">
+      <div id="ai-modal-hd">
+        <h3>🤖 AI 어시스턴트 선택</h3>
+        <button id="ai-modal-close" onclick="closeAIModal()">✕</button>
+      </div>
+      <div id="ai-provider-list">
+        <!-- Claude -->
+        <div class="ai-provider-card" id="card-claude" onclick="selectProvider('claude')">
+          <div class="ai-prov-icon" style="background:#1a0a30;color:#cc88ff;">C</div>
+          <div class="ai-prov-info">
+            <div class="ai-prov-name">Claude</div>
+            <div class="ai-prov-desc">Anthropic · claude-sonnet-4-5</div>
+          </div>
+          <span class="ai-prov-badge need" id="badge-claude">API 키 필요</span>
+        </div>
+        <div class="ai-key-area" id="key-claude">
+          <label>Anthropic API Key</label>
+          <div class="ai-key-row">
+            <input class="ai-key-inp" id="inp-claude" type="password" placeholder="sk-ant-...">
+            <button class="ai-key-save" onclick="saveKey('claude')">저장</button>
+          </div>
+          <div class="ai-key-status" id="status-claude"></div>
+        </div>
+
+        <!-- ChatGPT -->
+        <div class="ai-provider-card" id="card-chatgpt" onclick="selectProvider('chatgpt')">
+          <div class="ai-prov-icon" style="background:#0a2a1a;color:#10a37f;font-size:14px;font-weight:900;">GPT</div>
+          <div class="ai-prov-info">
+            <div class="ai-prov-name">ChatGPT</div>
+            <div class="ai-prov-desc">OpenAI · gpt-4o-mini</div>
+          </div>
+          <span class="ai-prov-badge need" id="badge-chatgpt">API 키 필요</span>
+        </div>
+        <div class="ai-key-area" id="key-chatgpt">
+          <label>OpenAI API Key</label>
+          <div class="ai-key-row">
+            <input class="ai-key-inp" id="inp-chatgpt" type="password" placeholder="sk-...">
+            <button class="ai-key-save" onclick="saveKey('chatgpt')" style="border-color:#10a37f;color:#10a37f;">저장</button>
+          </div>
+          <div class="ai-key-status" id="status-chatgpt"></div>
+        </div>
+
+        <!-- Gemini -->
+        <div class="ai-provider-card" id="card-gemini" onclick="selectProvider('gemini')">
+          <div class="ai-prov-icon" style="background:#0a1a3a;color:#4a8fff;font-size:14px;">✦</div>
+          <div class="ai-prov-info">
+            <div class="ai-prov-name">Gemini</div>
+            <div class="ai-prov-desc">Google · gemini-1.5-flash</div>
+          </div>
+          <span class="ai-prov-badge need" id="badge-gemini">API 키 필요</span>
+        </div>
+        <div class="ai-key-area" id="key-gemini">
+          <label>Google AI API Key</label>
+          <div class="ai-key-row">
+            <input class="ai-key-inp" id="inp-gemini" type="password" placeholder="AIza...">
+            <button class="ai-key-save" onclick="saveKey('gemini')" style="border-color:#4a8fff;color:#4a8fff;">저장</button>
+          </div>
+          <div class="ai-key-status" id="status-gemini"></div>
+        </div>
+
+        <!-- Grok -->
+        <div class="ai-provider-card" id="card-grok" onclick="selectProvider('grok')">
+          <div class="ai-prov-icon" style="background:#1a1a1a;color:#ffffff;font-size:16px;">𝕏</div>
+          <div class="ai-prov-info">
+            <div class="ai-prov-name">Grok</div>
+            <div class="ai-prov-desc">xAI · grok-beta</div>
+          </div>
+          <span class="ai-prov-badge need" id="badge-grok">API 키 필요</span>
+        </div>
+        <div class="ai-key-area" id="key-grok">
+          <label>xAI API Key</label>
+          <div class="ai-key-row">
+            <input class="ai-key-inp" id="inp-grok" type="password" placeholder="xai-...">
+            <button class="ai-key-save" onclick="saveKey('grok')" style="border-color:#fff;color:#fff;">저장</button>
+          </div>
+          <div class="ai-key-status" id="status-grok"></div>
+        </div>
+
+        <!-- 기타 -->
+        <div class="ai-provider-card" id="card-custom" onclick="selectProvider('custom')">
+          <div class="ai-prov-icon" style="background:#1a1510;color:#ff9900;font-size:20px;">⚙</div>
+          <div class="ai-prov-info">
+            <div class="ai-prov-name">기타 AI</div>
+            <div class="ai-prov-desc">이름 + API Key 직접 입력</div>
+          </div>
+          <span class="ai-prov-badge need" id="badge-custom">미설정</span>
+        </div>
+        <div class="ai-key-area" id="key-custom">
+          <label>AI 이름</label>
+          <div class="ai-custom-row">
+            <input class="ai-custom-inp" id="inp-custom-name" placeholder="예: Llama, Mistral, ...">
+          </div>
+          <label>OpenAI 호환 엔드포인트 URL</label>
+          <div class="ai-custom-row">
+            <input class="ai-custom-inp" id="inp-custom-url" placeholder="https://api.example.com/v1/chat/completions">
+          </div>
+          <label>API Key</label>
+          <div class="ai-key-row">
+            <input class="ai-key-inp" id="inp-custom-key" type="password" placeholder="API Key">
+            <button class="ai-key-save" onclick="saveKey('custom')" style="border-color:var(--orange);color:var(--orange);">저장</button>
+          </div>
+          <div class="ai-key-status" id="status-custom"></div>
+        </div>
+      </div>
+
+      <div class="ai-modal-footer">
+        <button onclick="closeAIModal()" style="padding:6px 18px;background:var(--bg3);border:1px solid var(--b2);color:var(--mid);border-radius:4px;font-size:11px;">닫기</button>
+        <button onclick="applyProvider()" id="ai-apply-btn" style="padding:6px 18px;background:#1a1030;border:1px solid var(--purple);color:var(--purple);border-radius:4px;font-size:11px;font-weight:700;">이 AI로 사용</button>
       </div>
     </div>
   </div>
@@ -537,6 +744,95 @@ const CLI_INIT=[
 ];
 let cliHist=[...CLI_INIT],cmdHist=[],hIdx=-1;
 let aiMessages=[{role:'bot',text:'안녕하세요! Kcode 개발을 도와드리는 K-AI입니다.\n블록 코딩이나 .han 문법에 대해 무엇이든 물어보세요 😊',time:''}];
+
+/* ── AI 상태 ── */
+const AI_PROVIDERS={
+  claude: {name:'Claude',    color:'#cc88ff', dot:'#aa55ff', model:'claude-haiku-4-5-20251001'},
+  chatgpt:{name:'ChatGPT',   color:'#10a37f', dot:'#10a37f', model:'gpt-4o-mini'},
+  gemini: {name:'Gemini',    color:'#4a8fff', dot:'#4a8fff', model:'gemini-1.5-flash'},
+  grok:   {name:'Grok',      color:'#ffffff', dot:'#888888', model:'grok-beta'},
+  custom: {name:'기타 AI',   color:'#ff9900', dot:'#ff9900', model:''},
+};
+let activeProvider='claude';
+let pendingProvider='claude';
+const AI_KEYS={};  /* 런타임 키 저장 (새로고침 시 초기화, 보안상 localStorage 미사용) */
+
+/* ── 모달 열기/닫기 ── */
+function openAIModal(){
+  pendingProvider=activeProvider;
+  document.getElementById('ai-modal-bg').classList.add('open');
+  refreshModalUI();
+}
+function closeAIModal(){
+  document.getElementById('ai-modal-bg').classList.remove('open');
+  /* 열려있던 키 입력창 닫기 */
+  document.querySelectorAll('.ai-key-area').forEach(el=>el.classList.remove('open'));
+  document.querySelectorAll('.ai-provider-card').forEach(el=>el.classList.remove('selected'));
+}
+document.addEventListener('click',e=>{
+  if(e.target.id==='ai-modal-bg')closeAIModal();
+});
+
+function refreshModalUI(){
+  Object.keys(AI_PROVIDERS).forEach(id=>{
+    const card=document.getElementById('card-'+id);
+    const badge=document.getElementById('badge-'+id);
+    if(!card)return;
+    card.classList.toggle('selected', id===pendingProvider);
+    if(AI_KEYS[id]){
+      badge.textContent='설정됨 ✓'; badge.className='ai-prov-badge ok';
+    }else if(id==='custom'){
+      badge.textContent='미설정'; badge.className='ai-prov-badge need';
+    }else{
+      badge.textContent='API 키 필요'; badge.className='ai-prov-badge need';
+    }
+  });
+}
+
+function selectProvider(id){
+  pendingProvider=id;
+  /* 모든 카드/키영역 리셋 */
+  document.querySelectorAll('.ai-provider-card').forEach(el=>el.classList.remove('selected'));
+  document.querySelectorAll('.ai-key-area').forEach(el=>el.classList.remove('open'));
+  /* 선택 카드 강조 + 키 입력 열기 */
+  document.getElementById('card-'+id).classList.add('selected');
+  document.getElementById('key-'+id).classList.add('open');
+  refreshModalUI();
+}
+
+function saveKey(id){
+  let key='';
+  if(id==='custom'){
+    const name=document.getElementById('inp-custom-name').value.trim();
+    const url=document.getElementById('inp-custom-url').value.trim();
+    key=document.getElementById('inp-custom-key').value.trim();
+    if(!name||!key){setKeyStatus(id,'⚠ 이름과 API Key를 입력하세요','#ff9900');return;}
+    AI_PROVIDERS.custom.name=name;
+    AI_PROVIDERS.custom.customUrl=url;
+  }else{
+    key=document.getElementById('inp-'+id).value.trim();
+    if(!key){setKeyStatus(id,'⚠ API Key를 입력하세요','#ff9900');return;}
+  }
+  AI_KEYS[id]=key;
+  setKeyStatus(id,'✓ 저장됨','#00e890');
+  refreshModalUI();
+}
+function setKeyStatus(id,msg,clr){
+  const el=document.getElementById('status-'+id);
+  if(el){el.textContent=msg;el.style.color=clr;}
+}
+
+function applyProvider(){
+  activeProvider=pendingProvider;
+  const prov=AI_PROVIDERS[activeProvider];
+  /* 상단 뱃지 업데이트 */
+  document.getElementById('ai-sel-dot').style.cssText=`background:${prov.dot};box-shadow:0 0 6px ${prov.dot};`;
+  document.getElementById('ai-sel-name').textContent=prov.name;
+  /* 안내 메시지 */
+  aiMessages.push({role:'bot',text:`✓ ${prov.name}로 전환되었습니다.${AI_KEYS[activeProvider]?'':'⚠ API 키가 없어 내장 응답을 사용합니다.'}`,time:nowTime()});
+  renderAI();
+  closeAIModal();
+}
 
 /* ── 유틸 ── */
 function findBlock(uid,bls){for(const b of bls){if(b.uid===uid)return b;const f=b.children?.length?findBlock(uid,b.children):null;if(f)return f;}return null;}
@@ -781,29 +1077,128 @@ function renderAI(){
   });
 }
 
-function aiSend(){
-  const inp=document.getElementById('ai-input');const txt=inp.value.trim();if(!txt)return;
-  aiMessages.push({role:'user',text:txt,time:nowTime()});inp.value='';renderAI();
-  const el=document.getElementById('ai-msgs');
-  const typing=document.createElement('div');typing.className='ai-msg bot';typing.id='ai-typing';
-  typing.innerHTML='<div class="ai-bub" style="padding:7px 10px;"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span></div>';
-  el.appendChild(typing);el.scrollTop=el.scrollHeight;
-  setTimeout(()=>{
-    document.getElementById('ai-typing')?.remove();
-    aiMessages.push({role:'bot',text:getAIResp(txt),time:nowTime()});renderAI();
-  },500+Math.random()*600);
-}
+/* ── Kcode 시스템 프롬프트 ── */
+const KC_SYSTEM=`당신은 Kcode 언어 전문 AI 어시스턴트입니다.
+Kcode는 한글 키워드 기반 프로그래밍 언어입니다.
+주요 문법: 만약/아니면(if/else), 반복(for), 동안(while), 함수/정의(func/void), 출력(print)
+자료형: 정수/실수/문자/글자/논리/배열/사전/텐서
+블록 종류: 자료형, 제어문, 함수, 객체, 예외, 스크립트, 가속기, 온톨로지, MCP, 계약, AI, 임베디드, 안전, 지식뱅크
+Kcode 코드 예제와 블록 사용법을 한국어로 친절하게 답변하세요.`;
 
-function getAIResp(q){
+/* ── 내장 응답 (키 없을 때 폴백) ── */
+function getBuiltinResp(q){
   const lq=q.toLowerCase();
   if(lq.includes('만약')||lq.includes('if'))return'만약 블록 사용법:\n\n만약 조건:\n    // 참일 때\n아니면:\n    // 거짓일 때';
   if(lq.includes('함수'))return'함수 선언:\n\n함수 더하기(정수 가, 정수 나):\n    반환 가 + 나\n\n정의 인사(문자 이름):\n    출력("안녕, " + 이름)';
   if(lq.includes('온톨로지'))return'온톨로지 블록:\n\n온톨로지 "내장":\n    개념 "제품":\n        속성 "이름" 문자\n    개념끝\n온톨로지끝';
   if(lq.includes('예제')||lq.includes('sample'))return'기본 예제:\n\n정수 합 = 0\n반복 i 부터 1 까지 10:\n    합 = 합 + i\n출력("합: " + 합)';
   if(lq.includes('오류')||lq.includes('에러'))return'오류 수정 팁:\n1. 들여쓰기 확인 (공백 4칸)\n2. 블록 끝에 ":" 확인\n3. 변수 자료형 명시\n4. 법령/헌법으로 사전조건 추가';
-  if(lq.includes('문법'))return'Kcode 기본 문법:\n• 들여쓰기 기반 (Python 방식)\n• 한글 키워드\n• 자료형: 정수/실수/문자/글자/논리\n• 함수 vs 정의(void)\n• 계약/가속기/온톨로지/MCP';
-  if(lq.includes('wasm'))return'WASM 모드:\n• kserver 없어도 브라우저에서 직접 실행\n• kc_wasm_run() — 실행\n• kc_wasm_lex() — 토큰 분석\n• kc_wasm_parse() — AST 파싱\n• 상단 배지에서 연결 상태 확인';
-  return`"${q}"에 대해 답변드리겠습니다.\n더 구체적인 질문을 해주시면 더 정확히 도움드릴 수 있어요.\n예: "만약 블록 사용법", "WASM 모드란?"`;
+  if(lq.includes('문법'))return'Kcode 기본 문법:\n• 들여쓰기 기반 (Python 방식)\n• 한글 키워드\n• 자료형: 정수/실수/문자/글자/논리\n• 함수 vs 정의(void)';
+  return`"${q}"에 대한 답변입니다.\n⚠ AI API 키가 없어 내장 응답을 사용 중입니다.\n우측 상단 AI 선택 버튼에서 API 키를 설정하면 실제 AI와 대화할 수 있습니다.`;
+}
+
+/* ── 실제 AI API 호출 ── */
+async function callAI(provider, messages){
+  const key=AI_KEYS[provider];
+  if(!key) return null; /* 키 없으면 null → 내장 응답 사용 */
+
+  const msgs=[{role:'system',content:KC_SYSTEM},...messages.map(m=>({role:m.role==='bot'?'assistant':'user',content:m.text}))];
+
+  /* Claude */
+  if(provider==='claude'){
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:AI_PROVIDERS.claude.model,max_tokens:1024,
+        system:KC_SYSTEM,
+        messages:messages.slice(-6).map(m=>({role:m.role==='bot'?'assistant':'user',content:m.text}))})
+    });
+    if(!r.ok)throw new Error(`Claude API ${r.status}`);
+    const d=await r.json();
+    return d.content?.[0]?.text||'';
+  }
+
+  /* ChatGPT */
+  if(provider==='chatgpt'){
+    const r=await fetch('https://api.openai.com/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:AI_PROVIDERS.chatgpt.model,messages:msgs.slice(-8),max_tokens:1024})
+    });
+    if(!r.ok)throw new Error(`OpenAI API ${r.status}`);
+    const d=await r.json();
+    return d.choices?.[0]?.message?.content||'';
+  }
+
+  /* Gemini */
+  if(provider==='gemini'){
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_PROVIDERS.gemini.model}:generateContent?key=${key}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:messages.slice(-6).map(m=>({role:m.role==='bot'?'model':'user',parts:[{text:m.text}]})),
+        systemInstruction:{parts:[{text:KC_SYSTEM}]}})
+    });
+    if(!r.ok)throw new Error(`Gemini API ${r.status}`);
+    const d=await r.json();
+    return d.candidates?.[0]?.content?.parts?.[0]?.text||'';
+  }
+
+  /* Grok (OpenAI 호환) */
+  if(provider==='grok'){
+    const r=await fetch('https://api.x.ai/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:AI_PROVIDERS.grok.model,messages:msgs.slice(-8),max_tokens:1024})
+    });
+    if(!r.ok)throw new Error(`Grok API ${r.status}`);
+    const d=await r.json();
+    return d.choices?.[0]?.message?.content||'';
+  }
+
+  /* 기타 (OpenAI 호환 엔드포인트) */
+  if(provider==='custom'){
+    const url=AI_PROVIDERS.custom.customUrl||'';
+    if(!url)throw new Error('엔드포인트 URL이 설정되지 않았습니다');
+    const r=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:AI_PROVIDERS.custom.model||'default',messages:msgs.slice(-8),max_tokens:1024})
+    });
+    if(!r.ok)throw new Error(`API ${r.status}`);
+    const d=await r.json();
+    return d.choices?.[0]?.message?.content||'';
+  }
+  return null;
+}
+
+/* ── aiSend: 실제 AI API → 폴백 내장 응답 ── */
+async function aiSend(){
+  const inp=document.getElementById('ai-input');
+  const txt=inp.value.trim();if(!txt)return;
+  aiMessages.push({role:'user',text:txt,time:nowTime()});
+  inp.value='';renderAI();
+
+  const el=document.getElementById('ai-msgs');
+  const typing=document.createElement('div');
+  typing.className='ai-msg bot';typing.id='ai-typing';
+  const prov=AI_PROVIDERS[activeProvider];
+  typing.innerHTML=`<div class="ai-bub" style="padding:7px 10px;border-color:${prov.dot}44;">
+    <span style="color:${prov.dot};font-size:9px;margin-right:4px;">${prov.name}</span>
+    <span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span>
+  </div>`;
+  el.appendChild(typing);el.scrollTop=el.scrollHeight;
+
+  let reply='';
+  try{
+    const apiResp=await callAI(activeProvider,[...aiMessages]);
+    reply=apiResp??getBuiltinResp(txt);
+  }catch(e){
+    reply=`⚠ ${AI_PROVIDERS[activeProvider].name} API 오류:\n${e.message}\n\n내장 응답으로 대체합니다.\n\n`+getBuiltinResp(txt);
+  }
+
+  document.getElementById('ai-typing')?.remove();
+  aiMessages.push({role:'bot',text:reply,time:nowTime()});
+  renderAI();
 }
 
 /* ================================================================
