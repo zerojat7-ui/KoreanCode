@@ -1,0 +1,1421 @@
+// kc_llvm_gen.han — AST 순회 LLVM IR 코드 생성기
+// version : v0.9.0
+// §LLVM-SH Phase 7
+// 의존: kc_llvm_func.han
+
+#포함 "kc_llvm_func.han"
+
+// ================================================================
+//  AST 정규화 — kparser.han 형식 → gen.han 기대 형식 변환
+//  kparser.han:  node["자식들"], node["문자열"], operator=int
+//  gen.han 기대: node["자식"],   node["이름"],   operator=string
+//  (§LLVM-SH v0.7.0 추가)
+// ================================================================
+
+// 연산자 토큰 정수 → 문자열
+함수 llvm연산자문자열(정수 tok):
+    선택 tok:
+        경우 TOK_PLUS:      반환 "+"
+        경우 TOK_MINUS:     반환 "-"
+        경우 TOK_STAR:      반환 "*"
+        경우 TOK_SLASH:     반환 "/"
+        경우 TOK_PERCENT:   반환 "%"
+        경우 TOK_EQEQ:      반환 "=="
+        경우 TOK_BANGEQ:    반환 "!="
+        경우 TOK_GT:        반환 ">"
+        경우 TOK_LT:        반환 "<"
+        경우 TOK_GTEQ:      반환 ">="
+        경우 TOK_LTEQ:      반환 "<="
+        경우 TOK_KW_AND:    반환 "그리고"
+        경우 TOK_KW_OR:     반환 "또는"
+        경우 TOK_KW_NOT:    반환 "아니다"
+        경우 TOK_AMP:       반환 "&"
+        경우 TOK_PIPE:      반환 "|"
+        경우 TOK_CARET:     반환 "^"
+        경우 TOK_LTLT:      반환 "<<"
+        경우 TOK_GTGT:      반환 ">>"
+        기본:               반환 "?"
+
+// 자료형 토큰 정수 → 문자열
+함수 llvm자료형문자열(정수 tok):
+    선택 tok:
+        경우 TOK_KW_JEONGSU:  반환 "정수"
+        경우 TOK_KW_SILSU:    반환 "실수"
+        경우 TOK_KW_GEULJA:   반환 "문자"
+        경우 TOK_KW_MUNJA:    반환 "문자"
+        경우 TOK_KW_NOLI:     반환 "논리"
+        경우 TOK_KW_MOGLOG:   반환 "목록"
+        경우 TOK_KW_BAELYEOL: 반환 "배열"
+        기본:                  반환 ""
+
+// AST 노드 정규화 (재귀) — kparser.han 원시 형식 → gen.han 기대 형식
+정의 llvmAST정규화(목록 node):
+    만약 node == 없음:
+        반환
+    // 자식 배열 별칭
+    node["자식"] = node["자식들"]
+
+    정수 종류 = node["종류"]
+    정수 총 = 길이(node["자식들"])
+
+    선택 종류:
+        경우 NODE_PROGRAM:
+            각각 자식 안에 node["자식들"]:
+                llvmAST정규화(자식)
+
+        경우 NODE_FUNC_DECL:
+        경우 NODE_VOID_DECL:
+            node["이름"] = node["문자열"]
+            // 자식들: [...NODE_PARAM..., NODE_BLOCK(body)]
+            // 마지막 자식 = 본문 블록, 나머지 = 매개변수
+            목록 params = []
+            정수 pi = 0
+            동안 pi < 총 - 1:
+                목록 p = node["자식들"][pi]
+                만약 p["종류"] == NODE_PARAM:
+                    p["이름"] = p["문자열"]
+                    p["타입"] = llvm자료형문자열(p["자료형"])
+                    params += [p]
+                pi = pi + 1
+            node["매개변수"] = params
+            만약 총 > 0:
+                node["본문"] = node["자식들"][총 - 1]
+                llvmAST정규화(node["본문"])
+            아니면:
+                node["본문"] = 없음
+
+        경우 NODE_CLASS_DECL:
+            node["이름"] = node["문자열"]
+            // 마지막 자식 = 클래스 본문 블록
+            만약 총 > 0:
+                node["본문"] = node["자식들"][총 - 1]
+                llvmAST정규화(node["본문"])
+
+        경우 NODE_VAR_DECL:
+        경우 NODE_CONST_DECL:
+            node["이름"] = node["문자열"]
+            node["타입"] = llvm자료형문자열(node["자료형"])
+            만약 총 > 0:
+                node["초기값"] = node["자식들"][0]
+                llvmAST정규화(node["자식들"][0])
+            아니면:
+                node["초기값"] = 없음
+
+        경우 NODE_EXPR_STMT:
+            만약 총 > 0:
+                node["표현식"] = node["자식들"][0]
+                llvmAST정규화(node["자식들"][0])
+
+        경우 NODE_RETURN:
+            만약 총 > 0:
+                node["표현식"] = node["자식들"][0]
+                llvmAST정규화(node["자식들"][0])
+
+        경우 NODE_RAISE:
+            만약 총 > 0:
+                node["메시지"] = node["자식들"][0]
+                llvmAST정규화(node["자식들"][0])
+
+        경우 NODE_IF:
+        경우 NODE_ELIF:
+            // children[0]=조건, children[1]=참블록, children[2]=elif/else(선택)
+            만약 총 >= 1:
+                node["조건"] = node["자식들"][0]
+                llvmAST정규화(node["자식들"][0])
+            만약 총 >= 2:
+                node["참본문"] = node["자식들"][1]
+                llvmAST정규화(node["자식들"][1])
+            만약 총 >= 3:
+                목록 tail = node["자식들"][2]
+                만약 tail["종류"] == NODE_ELSE:
+                    // else: body is tail's first child
+                    만약 길이(tail["자식들"]) > 0:
+                        node["거짓본문"] = tail["자식들"][0]
+                        llvmAST정규화(tail["자식들"][0])
+                    아니면:
+                        node["거짓본문"] = 없음
+                아니면 만약 tail["종류"] == NODE_ELIF:
+                    // elif → 거짓본문으로 재귀 처리 (중첩 if처럼)
+                    llvmAST정규화(tail)
+                    node["거짓본문"] = tail
+                아니면:
+                    llvmAST정규화(tail)
+                    node["거짓본문"] = tail
+            아니면:
+                node["거짓본문"] = 없음
+
+        경우 NODE_WHILE:
+            만약 총 >= 2:
+                node["조건"] = node["자식들"][0]
+                node["본문"] = node["자식들"][1]
+                llvmAST정규화(node["자식들"][0])
+                llvmAST정규화(node["자식들"][1])
+
+        경우 NODE_FOR_RANGE:
+            // children: [start, end, (step,) body]
+            node["변수"] = node["문자열"]
+            만약 총 >= 2:
+                node["시작"] = node["자식들"][0]
+                node["끝"]   = node["자식들"][1]
+                llvmAST정규화(node["자식들"][0])
+                llvmAST정규화(node["자식들"][1])
+            만약 총 == 4:
+                node["증분"] = node["자식들"][2]
+                node["본문"] = node["자식들"][3]
+                llvmAST정규화(node["자식들"][2])
+                llvmAST정규화(node["자식들"][3])
+            아니면 만약 총 == 3:
+                node["증분"] = 없음
+                node["본문"] = node["자식들"][2]
+                llvmAST정규화(node["자식들"][2])
+
+        경우 NODE_FOR_EACH:
+            node["변수"] = node["문자열"]
+            만약 총 >= 2:
+                node["배열"] = node["자식들"][0]
+                node["본문"] = node["자식들"][1]
+                llvmAST정규화(node["자식들"][0])
+                llvmAST정규화(node["자식들"][1])
+
+        경우 NODE_SWITCH:
+            만약 총 >= 1:
+                node["조건"] = node["자식들"][0]
+                llvmAST정규화(node["자식들"][0])
+                목록 cases = []
+                정수 ci = 1
+                동안 ci < 총:
+                    목록 c = node["자식들"][ci]
+                    만약 c["종류"] == NODE_CASE:
+                        만약 길이(c["자식들"]) >= 2:
+                            c["값"] = c["자식들"][0]
+                            c["본문"] = c["자식들"][1]
+                            llvmAST정규화(c["자식들"][0])
+                            llvmAST정규화(c["자식들"][1])
+                    아니면 만약 c["종류"] == NODE_DEFAULT:
+                        만약 길이(c["자식들"]) >= 1:
+                            c["본문"] = c["자식들"][0]
+                            llvmAST정규화(c["자식들"][0])
+                    cases += [c]
+                    ci = ci + 1
+                node["경우목록"] = cases
+
+        경우 NODE_TRY:
+            // children[0]=시도블록, children[1]=실패시블록, children[2]=항상블록(선택)
+            만약 총 >= 1:
+                node["본문"] = node["자식들"][0]
+                llvmAST정규화(node["자식들"][0])
+            만약 총 >= 2:
+                node["실패시본문"] = node["자식들"][1]
+                llvmAST정규화(node["자식들"][1])
+            만약 총 >= 3:
+                node["항상본문"] = node["자식들"][2]
+                llvmAST정규화(node["자식들"][2])
+
+        경우 NODE_BLOCK:
+            각각 자식 안에 node["자식들"]:
+                llvmAST정규화(자식)
+
+        경우 NODE_ASSIGN:
+            만약 총 >= 2:
+                node["대상"] = node["자식들"][0]
+                node["값"]   = node["자식들"][1]
+                llvmAST정규화(node["자식들"][0])
+                llvmAST정규화(node["자식들"][1])
+
+        경우 NODE_BINARY:
+            만약 총 >= 2:
+                node["왼쪽"]   = node["자식들"][0]
+                node["오른쪽"] = node["자식들"][1]
+                llvmAST정규화(node["자식들"][0])
+                llvmAST정규화(node["자식들"][1])
+            // 연산자 토큰 정수 → 문자열
+            node["연산자"] = llvm연산자문자열(node["연산자"])
+
+        경우 NODE_UNARY:
+            만약 총 >= 1:
+                node["피연산자"] = node["자식들"][0]
+                llvmAST정규화(node["자식들"][0])
+            node["연산자"] = llvm연산자문자열(node["연산자"])
+
+        경우 NODE_CALL:
+            만약 총 >= 1:
+                node["함수"] = node["자식들"][0]
+                llvmAST정규화(node["자식들"][0])
+                목록 args = []
+                정수 ai = 1
+                동안 ai < 총:
+                    llvmAST정규화(node["자식들"][ai])
+                    args += [node["자식들"][ai]]
+                    ai = ai + 1
+                node["인수"] = args
+
+        경우 NODE_INDEX:
+            만약 총 >= 2:
+                node["배열"]   = node["자식들"][0]
+                node["인덱스"] = node["자식들"][1]
+                llvmAST정규화(node["자식들"][0])
+                llvmAST정규화(node["자식들"][1])
+
+        경우 NODE_MEMBER:
+            node["이름"]   = node["문자열"]   // 필드명
+            만약 총 >= 1:
+                node["객체"] = node["자식들"][0]   // 객체 표현식
+                llvmAST정규화(node["자식들"][0])
+
+        경우 NODE_ARRAY_LIT:
+            // 배열 리터럴 — 모든 원소 정규화
+            각각 자식 안에 node["자식들"]:
+                llvmAST정규화(자식)
+
+        경우 NODE_DICT_LIT:
+            // 사전 리터럴 — NODE_DICT_ENTRY 자식들 정규화
+            각각 entry 안에 node["자식들"]:
+                만약 길이(entry["자식들"]) >= 2:
+                    entry["키"] = entry["자식들"][0]
+                    entry["값"] = entry["자식들"][1]
+                    llvmAST정규화(entry["자식들"][0])
+                    llvmAST정규화(entry["자식들"][1])
+
+        경우 NODE_LAMBDA:
+            // 자식들: [PARAM..., 본문표현식]
+            // 마지막 자식 = 본문, 나머지 = 매개변수
+            목록 lparams = []
+            정수 lpi = 0
+            동안 lpi < 총 - 1:
+                목록 lp = node["자식들"][lpi]
+                만약 lp["종류"] == NODE_PARAM:
+                    lp["이름"] = lp["문자열"]
+                    lp["타입"] = llvm자료형문자열(lp["자료형"])
+                    lparams += [lp]
+                lpi = lpi + 1
+            node["매개변수"] = lparams
+            만약 총 > 0:
+                node["본문"] = node["자식들"][총 - 1]
+                llvmAST정규화(node["자식들"][총 - 1])
+            아니면:
+                node["본문"] = 없음
+
+        경우 NODE_IDENT:
+            node["이름"] = node["문자열"]
+
+        경우 NODE_INT_LIT:
+        경우 NODE_CHAR_LIT:
+            node["값"] = node["정수값"]
+
+        경우 NODE_FLOAT_LIT:
+            node["값"] = node["실수값"]
+
+        경우 NODE_BOOL_LIT:
+            node["값"] = node["논리값"]
+
+        경우 NODE_STRING_LIT:
+            node["값"] = node["문자열"]
+
+        기본:
+            // 알 수 없는 노드 — 자식만 재귀
+            각각 자식 안에 node["자식들"]:
+                llvmAST정규화(자식)
+
+// ================================================================
+//  최상위 진입점 — 프로그램 노드 처리
+// ================================================================
+
+// AST 루트(NODE_PROGRAM)를 받아 전체 IR 생성
+정의 llvm코드생성(목록 ctx, 목록 ast):
+    // kparser.han 원시 형식 → gen.han 기대 형식 정규화
+    llvmAST정규화(ast)
+
+    만약 ast["종류"] != NODE_PROGRAM:
+        llvm오류설정(ctx, "코드생성: 루트가 PROGRAM 노드가 아님")
+        반환
+
+    목록 문장목록 = ast["자식"]
+    정수 i = 0
+    동안 i < 길이(문장목록):
+        목록 문장 = 문장목록[i]
+        llvm최상위문장(ctx, 문장)
+        만약 llvm오류확인(ctx):
+            반환
+        i = i + 1
+
+// 최상위 선언 분류
+정의 llvm최상위문장(목록 ctx, 목록 node):
+    정수 종류 = node["종류"]
+    선택 종류:
+        경우 NODE_FUNC_DECL:
+            llvm함수선언생성(ctx, node)
+        경우 NODE_VOID_DECL:
+            llvm함수선언생성(ctx, node)
+        경우 NODE_CLASS_DECL:
+            llvm클래스선언생성(ctx, node)
+        경우 NODE_VAR_DECL:
+            llvm전역변수생성(ctx, node)
+        경우 NODE_CONST_DECL:
+            llvm전역변수생성(ctx, node)
+        경우 NODE_IMPORT:
+            // 모듈 가져오기는 런타임 단계에서 처리 — 무시
+            반환
+        기본:
+            // 최상위에 식/제어문이 오면 묵시적 main에 추가 (미래 확장)
+            반환
+
+// ================================================================
+//  함수 정의 생성
+// ================================================================
+
+정의 llvm함수선언생성(목록 ctx, 목록 node):
+    // 매개변수 파싱
+    목록 params = []
+    만약 "매개변수" 있음 node:
+        목록 raw = node["매개변수"]
+        정수 i = 0
+        동안 i < 길이(raw):
+            목록 p = raw[i]
+            정수 ptype = LLTY_I64
+            만약 "타입" 있음 p:
+                ptype = kcode타입→LLTY(p["타입"])
+            params += [목록 { "이름": p["이름"], "타입코드": ptype }]
+            i = i + 1
+
+    // 반환 타입
+    정수 반환타입 = LLTY_VOID
+    만약 node["종류"] == NODE_FUNC_DECL:
+        만약 "반환타입" 있음 node:
+            반환타입 = kcode타입→LLTY(node["반환타입"])
+        아니면:
+            반환타입 = LLTY_I64
+
+    // 함수 시작
+    llvm함수정의시작(ctx, node["이름"], 반환타입, params, LLLNK_EXTERNAL)
+
+    // 본문 생성
+    만약 "본문" 있음 node:
+        llvm블록생성(ctx, node["본문"], 반환타입)
+
+    // 암묵적 ret (종료 명령 없으면)
+    목록 현재bb = llvm현재블록(ctx)
+    만약 현재bb != 없음:
+        만약 현재bb["종료됨"] == 거짓:
+            만약 반환타입 == LLTY_VOID:
+                llvm빌드ret_void(ctx)
+            아니면:
+                // 기본 반환값 = 0
+                목록 영 = llvm상수정수(0, 반환타입)
+                llvm빌드ret(ctx, 영)
+
+    llvm함수정의종료(ctx)
+
+// ================================================================
+//  블록 (문장 목록) 생성
+// ================================================================
+
+정의 llvm블록생성(목록 ctx, 목록 블록node, 정수 반환타입):
+    목록 문장목록 = 블록node["자식"]
+    정수 i = 0
+    동안 i < 길이(문장목록):
+        llvm문장생성(ctx, 문장목록[i], 반환타입)
+        만약 llvm오류확인(ctx):
+            반환
+        // 이미 종료된 블록이면 나머지 문장 무시
+        목록 bb = llvm현재블록(ctx)
+        만약 bb != 없음:
+            만약 bb["종료됨"]:
+                반환
+        i = i + 1
+
+// ================================================================
+//  문장 생성 디스패치
+// ================================================================
+
+정의 llvm문장생성(목록 ctx, 목록 node, 정수 반환타입):
+    정수 종류 = node["종류"]
+    선택 종류:
+        경우 NODE_VAR_DECL:
+            llvm변수선언생성(ctx, node)
+        경우 NODE_CONST_DECL:
+            llvm변수선언생성(ctx, node)
+        경우 NODE_EXPR_STMT:
+            llvm표현식생성(ctx, node["표현식"])
+        경우 NODE_RETURN:
+            llvm반환생성(ctx, node, 반환타입)
+        경우 NODE_IF:
+            llvm만약생성(ctx, node, 반환타입)
+        경우 NODE_WHILE:
+            llvm동안생성(ctx, node, 반환타입)
+        경우 NODE_FOR_RANGE:
+            llvm반복생성(ctx, node, 반환타입)
+        경우 NODE_FOR_EACH:
+            llvm각각생성(ctx, node, 반환타입)
+        경우 NODE_BREAK:
+            llvm끝냄생성(ctx, node)
+        경우 NODE_CONTINUE:
+            llvm건너뜀생성(ctx, node)
+        경우 NODE_SWITCH:
+            llvm선택생성(ctx, node, 반환타입)
+        경우 NODE_TRY:
+            llvm시도생성(ctx, node, 반환타입)
+        경우 NODE_RAISE:
+            llvm오류발생생성(ctx, node)
+        경우 NODE_BLOCK:
+            llvm블록생성(ctx, node, 반환타입)
+        기본:
+            // 미지원 문장 — 경고 주석 삽입
+            llvm명령추가(ctx, "  ; [미구현 문장 종류=" + 문자변환(종류) + "]")
+
+// ================================================================
+//  변수 선언 생성 (alloca + 초기값 store)
+// ================================================================
+
+정의 llvm변수선언생성(목록 ctx, 목록 node):
+    문자 이름 = node["이름"]
+    정수 타입코드 = LLTY_I64
+    만약 "타입" 있음 node:
+        타입코드 = kcode타입→LLTY(node["타입"])
+
+    // alloca
+    목록 ptr값 = llvm빌드alloca(ctx, 타입코드, 이름 + ".addr")
+    llvm변수등록(ctx, 이름, ptr값)
+    llvm타입등록(ctx, 이름, 타입코드)
+
+    // 초기값 store
+    만약 "초기값" 있음 node:
+        만약 node["초기값"] != 없음:
+            목록 초기값 = llvm표현식생성(ctx, node["초기값"])
+            만약 초기값 != 없음:
+                목록 변환값 = llvm타입강제변환(ctx, 초기값, 타입코드)
+                llvm빌드store(ctx, 변환값, ptr값)
+
+// ================================================================
+//  반환문 생성
+// ================================================================
+
+정의 llvm반환생성(목록 ctx, 목록 node, 정수 반환타입):
+    만약 "표현식" 있음 node:
+        만약 node["표현식"] != 없음:
+            목록 값 = llvm표현식생성(ctx, node["표현식"])
+            목록 변환값 = llvm타입강제변환(ctx, 값, 반환타입)
+            llvm빌드ret(ctx, 변환값)
+            반환
+    llvm빌드ret_void(ctx)
+
+// ================================================================
+//  만약 (if/elif/else) 생성
+// ================================================================
+
+정의 llvm만약생성(목록 ctx, 목록 node, 정수 반환타입):
+    // 조건 평가
+    목록 조건값 = llvm표현식생성(ctx, node["조건"])
+    목록 조건i1 = llvm i1변환(ctx, 조건값)
+
+    // 레이블 생성
+    문자 참레이블  = llvm새레이블(ctx, "if.then")
+    문자 합레이블  = llvm새레이블(ctx, "if.end")
+    문자 거짓레이블 = 합레이블
+
+    논리 else있음 = "거짓본문" 있음 node 그리고 node["거짓본문"] != 없음
+
+    만약 else있음:
+        거짓레이블 = llvm새레이블(ctx, "if.else")
+
+    // 조건 분기
+    llvm빌드br조건(ctx, 조건i1, 참레이블, 거짓레이블)
+
+    // 참 블록
+    정수 참인덱스 = llvm블록추가(ctx, 참레이블)
+    llvm블록전환(ctx, 참인덱스)
+    llvm블록레이블삽입(ctx, 참레이블)
+    llvm블록생성(ctx, node["참본문"], 반환타입)
+    목록 참bb = llvm현재블록(ctx)
+    만약 참bb["종료됨"] == 거짓:
+        llvm빌드br(ctx, 합레이블)
+
+    // 거짓 블록 (있으면)
+    만약 else있음:
+        정수 거짓인덱스 = llvm블록추가(ctx, 거짓레이블)
+        llvm블록전환(ctx, 거짓인덱스)
+        llvm블록레이블삽입(ctx, 거짓레이블)
+        llvm블록생성(ctx, node["거짓본문"], 반환타입)
+        목록 거짓bb = llvm현재블록(ctx)
+        만약 거짓bb["종료됨"] == 거짓:
+            llvm빌드br(ctx, 합레이블)
+
+    // 합류 블록
+    정수 합인덱스 = llvm블록추가(ctx, 합레이블)
+    llvm블록전환(ctx, 합인덱스)
+    llvm블록레이블삽입(ctx, 합레이블)
+
+// ================================================================
+//  동안 (while) 생성
+// ================================================================
+
+정의 llvm동안생성(목록 ctx, 목록 node, 정수 반환타입):
+    문자 조건레이블 = llvm새레이블(ctx, "while.cond")
+    문자 본문레이블 = llvm새레이블(ctx, "while.body")
+    문자 끝레이블   = llvm새레이블(ctx, "while.end")
+
+    // 루프 컨텍스트 스택 (멈춤/건너뜀 처리)
+    ctx["루프끝레이블"]   = 끝레이블
+    ctx["루프조건레이블"] = 조건레이블
+
+    // 진입 → 조건 블록
+    llvm빌드br(ctx, 조건레이블)
+
+    // 조건 블록
+    정수 조건인덱스 = llvm블록추가(ctx, 조건레이블)
+    llvm블록전환(ctx, 조건인덱스)
+    llvm블록레이블삽입(ctx, 조건레이블)
+    목록 조건값 = llvm표현식생성(ctx, node["조건"])
+    목록 조건i1 = llvm i1변환(ctx, 조건값)
+    llvm빌드br조건(ctx, 조건i1, 본문레이블, 끝레이블)
+
+    // 본문 블록
+    정수 본문인덱스 = llvm블록추가(ctx, 본문레이블)
+    llvm블록전환(ctx, 본문인덱스)
+    llvm블록레이블삽입(ctx, 본문레이블)
+    llvm블록생성(ctx, node["본문"], 반환타입)
+    목록 본문bb = llvm현재블록(ctx)
+    만약 본문bb["종료됨"] == 거짓:
+        llvm빌드br(ctx, 조건레이블)
+
+    // 끝 블록
+    정수 끝인덱스 = llvm블록추가(ctx, 끝레이블)
+    llvm블록전환(ctx, 끝인덱스)
+    llvm블록레이블삽입(ctx, 끝레이블)
+
+// ================================================================
+//  반복 (for range: 반복 N번) 생성
+// ================================================================
+
+정의 llvm반복생성(목록 ctx, 목록 node, 정수 반환타입):
+    // 반복 변수 alloca
+    문자 iv이름 = "_kloop_i"
+    만약 "변수" 있음 node:
+        iv이름 = node["변수"]
+
+    목록 iv주소 = llvm빌드alloca(ctx, LLTY_I64, iv이름 + ".addr")
+    llvm변수등록(ctx, iv이름, iv주소)
+    llvm타입등록(ctx, iv이름, LLTY_I64)
+
+    // 시작값 store
+    목록 시작값 = llvm상수정수(0, LLTY_I64)
+    만약 "시작" 있음 node:
+        시작값 = llvm표현식생성(ctx, node["시작"])
+        시작값 = llvm타입강제변환(ctx, 시작값, LLTY_I64)
+    llvm빌드store(ctx, 시작값, iv주소)
+
+    // 끝값 / 증분
+    목록 끝값 = llvm표현식생성(ctx, node["끝"])
+    끝값 = llvm타입강제변환(ctx, 끝값, LLTY_I64)
+    목록 증분값 = llvm상수정수(1, LLTY_I64)
+    만약 "증분" 있음 node:
+        만약 node["증분"] != 없음:
+            증분값 = llvm표현식생성(ctx, node["증분"])
+            증분값 = llvm타입강제변환(ctx, 증분값, LLTY_I64)
+
+    // 레이블
+    문자 조건레이블 = llvm새레이블(ctx, "for.cond")
+    문자 본문레이블 = llvm새레이블(ctx, "for.body")
+    문자 증가레이블 = llvm새레이블(ctx, "for.inc")
+    문자 끝레이블   = llvm새레이블(ctx, "for.end")
+    ctx["루프끝레이블"]   = 끝레이블
+    ctx["루프조건레이블"] = 증가레이블
+
+    llvm빌드br(ctx, 조건레이블)
+
+    // 조건 블록: i < 끝
+    정수 조건인덱스 = llvm블록추가(ctx, 조건레이블)
+    llvm블록전환(ctx, 조건인덱스)
+    llvm블록레이블삽입(ctx, 조건레이블)
+    목록 iv값 = llvm빌드load(ctx, LLTY_I64, iv주소)
+    목록 cmp = llvm빌드icmp(ctx, LLCMP_SLT, iv값, 끝값)
+    llvm빌드br조건(ctx, cmp, 본문레이블, 끝레이블)
+
+    // 본문 블록
+    정수 본문인덱스 = llvm블록추가(ctx, 본문레이블)
+    llvm블록전환(ctx, 본문인덱스)
+    llvm블록레이블삽입(ctx, 본문레이블)
+    llvm블록생성(ctx, node["본문"], 반환타입)
+    목록 본문bb = llvm현재블록(ctx)
+    만약 본문bb["종료됨"] == 거짓:
+        llvm빌드br(ctx, 증가레이블)
+
+    // 증가 블록: i = i + 증분
+    정수 증가인덱스 = llvm블록추가(ctx, 증가레이블)
+    llvm블록전환(ctx, 증가인덱스)
+    llvm블록레이블삽입(ctx, 증가레이블)
+    목록 iv현재 = llvm빌드load(ctx, LLTY_I64, iv주소)
+    목록 iv다음 = llvm빌드정수이항(ctx, LLOP_ADD, iv현재, 증분값)
+    llvm빌드store(ctx, iv다음, iv주소)
+    llvm빌드br(ctx, 조건레이블)
+
+    // 끝 블록
+    정수 끝인덱스 = llvm블록추가(ctx, 끝레이블)
+    llvm블록전환(ctx, 끝인덱스)
+    llvm블록레이블삽입(ctx, 끝레이블)
+
+// ================================================================
+//  각각 (for each — 배열 순회) 생성  §LLVM-SH v0.5.0
+// ================================================================
+// 전개: 인라인 루프 (카운터 + kc_arr_get_i64 호출)
+// 형태: 각각 원소 in 배열: 본문
+
+정의 llvm각각생성(목록 ctx, 목록 node, 정수 반환타입):
+    // 순회 대상 배열 평가
+    목록 배열값 = llvm표현식생성(ctx, node["배열"])
+
+    // 길이 로드: i64 = kc_arr_len(ptr)
+    목록 길이값 = llvm빌드call(ctx, LLTY_I64, "@kc_arr_len", [배열값])
+
+    // 카운터 alloca
+    문자 iv이름 = "_keach_i"
+    목록 iv주소 = llvm빌드alloca(ctx, LLTY_I64, iv이름 + ".addr")
+    llvm빌드store(ctx, llvm상수정수(0, LLTY_I64), iv주소)
+
+    // 루프 변수 alloca (각각의 원소 변수)
+    문자 원소이름 = "원소"
+    만약 "변수" 있음 node:
+        원소이름 = node["변수"]
+    목록 원소주소 = llvm빌드alloca(ctx, LLTY_I64, 원소이름 + ".addr")
+    llvm변수등록(ctx, 원소이름, 원소주소)
+    llvm타입등록(ctx, 원소이름, LLTY_I64)
+
+    // 레이블
+    문자 조건레이블 = llvm새레이블(ctx, "each.cond")
+    문자 본문레이블 = llvm새레이블(ctx, "each.body")
+    문자 증가레이블 = llvm새레이블(ctx, "each.inc")
+    문자 끝레이블   = llvm새레이블(ctx, "each.end")
+    ctx["루프끝레이블"]   = 끝레이블
+    ctx["루프조건레이블"] = 증가레이블
+
+    llvm빌드br(ctx, 조건레이블)
+
+    // 조건 블록: i < 길이
+    정수 조건인덱스 = llvm블록추가(ctx, 조건레이블)
+    llvm블록전환(ctx, 조건인덱스)
+    llvm블록레이블삽입(ctx, 조건레이블)
+    목록 iv값 = llvm빌드load(ctx, LLTY_I64, iv주소)
+    목록 cmp = llvm빌드icmp(ctx, LLCMP_SLT, iv값, 길이값)
+    llvm빌드br조건(ctx, cmp, 본문레이블, 끝레이블)
+
+    // 본문 블록: 원소 = kc_arr_get_i64(배열, i)
+    정수 본문인덱스 = llvm블록추가(ctx, 본문레이블)
+    llvm블록전환(ctx, 본문인덱스)
+    llvm블록레이블삽입(ctx, 본문레이블)
+    목록 iv현재 = llvm빌드load(ctx, LLTY_I64, iv주소)
+    목록 원소값 = llvm빌드call(ctx, LLTY_I64, "@kc_arr_get_i64", [배열값, iv현재])
+    llvm빌드store(ctx, 원소값, 원소주소)
+    llvm블록생성(ctx, node["본문"], 반환타입)
+    목록 본문bb = llvm현재블록(ctx)
+    만약 본문bb["종료됨"] == 거짓:
+        llvm빌드br(ctx, 증가레이블)
+
+    // 증가 블록: i = i + 1
+    정수 증가인덱스 = llvm블록추가(ctx, 증가레이블)
+    llvm블록전환(ctx, 증가인덱스)
+    llvm블록레이블삽입(ctx, 증가레이블)
+    목록 iv다음 = llvm빌드정수이항(ctx, LLOP_ADD,
+                    llvm빌드load(ctx, LLTY_I64, iv주소),
+                    llvm상수정수(1, LLTY_I64))
+    llvm빌드store(ctx, iv다음, iv주소)
+    llvm빌드br(ctx, 조건레이블)
+
+    // 끝 블록
+    정수 끝인덱스 = llvm블록추가(ctx, 끝레이블)
+    llvm블록전환(ctx, 끝인덱스)
+    llvm블록레이블삽입(ctx, 끝레이블)
+
+// ================================================================
+//  끝냄 / 건너뜀 생성
+// ================================================================
+
+정의 llvm끝냄생성(목록 ctx, 목록 node):
+    만약 "루프끝레이블" 있음 ctx:
+        llvm빌드br(ctx, ctx["루프끝레이블"])
+    아니면:
+        llvm오류설정(ctx, "끝냄: 루프 밖에서 사용")
+
+정의 llvm건너뜀생성(목록 ctx, 목록 node):
+    만약 "루프조건레이블" 있음 ctx:
+        llvm빌드br(ctx, ctx["루프조건레이블"])
+    아니면:
+        llvm오류설정(ctx, "건너뜀: 루프 밖에서 사용")
+
+// ================================================================
+//  전역 변수 생성
+// ================================================================
+
+정의 llvm전역변수생성(목록 ctx, 목록 node):
+    문자 이름 = node["이름"]
+    정수 타입코드 = LLTY_I64
+    만약 "타입" 있음 node:
+        타입코드 = kcode타입→LLTY(node["타입"])
+
+    목록 전역값 = llvm전역변수선언(ctx, 이름, 타입코드, LLLNK_INTERNAL)
+    ctx["함수환경"][이름] = 전역값
+
+// ================================================================
+//  표현식 생성 디스패치
+// ================================================================
+
+함수 llvm표현식생성(목록 ctx, 목록 node):
+    정수 종류 = node["종류"]
+    선택 종류:
+        경우 NODE_INT_LIT:
+            반환 llvm상수정수(node["값"], LLTY_I64)
+        경우 NODE_FLOAT_LIT:
+            반환 llvm상수실수(node["값"])
+        경우 NODE_BOOL_LIT:
+            만약 node["값"]:
+                반환 llvm상수참()
+            반환 llvm상수거짓()
+        경우 NODE_NULL_LIT:
+            반환 llvm상수포인터null()
+        경우 NODE_STRING_LIT:
+            반환 llvm문자열상수(ctx, node["값"])
+        경우 NODE_CHAR_LIT:
+            반환 llvm상수정수(node["값"], LLTY_I32)
+        경우 NODE_IDENT:
+            반환 llvm식별자로드(ctx, node["이름"])
+        경우 NODE_BINARY:
+            반환 llvm이항생성(ctx, node)
+        경우 NODE_UNARY:
+            반환 llvm단항생성(ctx, node)
+        경우 NODE_ASSIGN:
+            반환 llvm대입생성(ctx, node)
+        경우 NODE_CALL:
+            반환 llvm호출생성(ctx, node)
+        경우 NODE_INDEX:
+            반환 llvm인덱스생성(ctx, node)
+        경우 NODE_MEMBER:
+            반환 llvm멤버접근생성(ctx, node)
+        경우 NODE_ARRAY_LIT:
+            반환 llvm배열리터럴생성(ctx, node)
+        경우 NODE_DICT_LIT:
+            반환 llvm사전리터럴생성(ctx, node)
+        경우 NODE_LAMBDA:
+            반환 llvm람다생성(ctx, node)
+        기본:
+            llvm명령추가(ctx, "  ; [미구현 표현식 종류=" + 문자변환(종류) + "]")
+            반환 llvm상수정수(0, LLTY_I64)
+
+// ================================================================
+//  식별자 로드
+// ================================================================
+
+함수 llvm식별자로드(목록 ctx, 문자 이름):
+    목록 ptr값 = llvm변수조회(ctx, 이름)
+    만약 ptr값 == 없음:
+        // 전역 또는 함수 참조
+        만약 이름 있음 ctx["함수환경"]:
+            반환 ctx["함수환경"][이름]
+        llvm오류설정(ctx, "미정의 식별자: " + 이름)
+        반환 llvm상수정수(0, LLTY_I64)
+    // alloca → load
+    정수 타입코드 = llvm타입조회(ctx, 이름)
+    반환 llvm빌드load(ctx, 타입코드, ptr값)
+
+// ================================================================
+//  이항 표현식 생성
+// ================================================================
+
+함수 llvm이항생성(목록 ctx, 목록 node):
+    문자 연산자 = node["연산자"]
+    목록 좌값 = llvm표현식생성(ctx, node["왼쪽"])
+    목록 우값 = llvm표현식생성(ctx, node["오른쪽"])
+
+    // 타입 승격
+    정수 공통타입 = llvm타입승격(좌값["타입코드"], 우값["타입코드"])
+    목록 좌변환 = llvm타입강제변환(ctx, 좌값, 공통타입)
+    목록 우변환 = llvm타입강제변환(ctx, 우값, 공통타입)
+
+    논리 실수모드 = llvm타입은실수형(공통타입)
+
+    // 문자열 연결: 피연산자 중 하나라도 PTR이면 kc_str_concat 사용
+    논리 str모드 = 좌값["타입코드"] == LLTY_PTR 또는 우값["타입코드"] == LLTY_PTR
+
+    선택 연산자:
+        경우 "+":
+            만약 str모드:
+                목록 lptr = llvm타입강제변환(ctx, 좌값, LLTY_PTR)
+                목록 rptr = llvm타입강제변환(ctx, 우값, LLTY_PTR)
+                반환 llvm빌드call(ctx, LLTY_PTR, "@kc_str_concat", [lptr, rptr])
+            만약 실수모드: 반환 llvm빌드실수이항(ctx, LLOP_FADD, 좌변환, 우변환)
+            반환 llvm빌드정수이항(ctx, LLOP_ADD, 좌변환, 우변환)
+        경우 "-":
+            만약 실수모드: 반환 llvm빌드실수이항(ctx, LLOP_FSUB, 좌변환, 우변환)
+            반환 llvm빌드정수이항(ctx, LLOP_SUB, 좌변환, 우변환)
+        경우 "*":
+            만약 실수모드: 반환 llvm빌드실수이항(ctx, LLOP_FMUL, 좌변환, 우변환)
+            반환 llvm빌드정수이항(ctx, LLOP_MUL, 좌변환, 우변환)
+        경우 "/":
+            만약 실수모드: 반환 llvm빌드실수이항(ctx, LLOP_FDIV, 좌변환, 우변환)
+            반환 llvm빌드정수이항(ctx, LLOP_SDIV, 좌변환, 우변환)
+        경우 "%":
+            반환 llvm빌드정수이항(ctx, LLOP_SREM, 좌변환, 우변환)
+        // 비교 연산자
+        경우 "==":
+            만약 실수모드: 반환 llvm빌드fcmp(ctx, LLCMP_OEQ, 좌변환, 우변환)
+            반환 llvm빌드icmp(ctx, LLCMP_EQ, 좌변환, 우변환)
+        경우 "!=":
+            만약 실수모드: 반환 llvm빌드fcmp(ctx, LLCMP_ONE, 좌변환, 우변환)
+            반환 llvm빌드icmp(ctx, LLCMP_NE, 좌변환, 우변환)
+        경우 "<":
+            만약 실수모드: 반환 llvm빌드fcmp(ctx, LLCMP_OLT, 좌변환, 우변환)
+            반환 llvm빌드icmp(ctx, LLCMP_SLT, 좌변환, 우변환)
+        경우 "<=":
+            만약 실수모드: 반환 llvm빌드fcmp(ctx, LLCMP_OLE, 좌변환, 우변환)
+            반환 llvm빌드icmp(ctx, LLCMP_SLE, 좌변환, 우변환)
+        경우 ">":
+            만약 실수모드: 반환 llvm빌드fcmp(ctx, LLCMP_OGT, 좌변환, 우변환)
+            반환 llvm빌드icmp(ctx, LLCMP_SGT, 좌변환, 우변환)
+        경우 ">=":
+            만약 실수모드: 반환 llvm빌드fcmp(ctx, LLCMP_OGE, 좌변환, 우변환)
+            반환 llvm빌드icmp(ctx, LLCMP_SGE, 좌변환, 우변환)
+        // 논리 연산
+        경우 "그리고":
+            반환 llvm빌드정수이항(ctx, LLOP_AND, 좌변환, 우변환)
+        경우 "또는":
+            반환 llvm빌드정수이항(ctx, LLOP_OR, 좌변환, 우변환)
+        // 비트 연산
+        경우 "&":
+            반환 llvm빌드정수이항(ctx, LLOP_AND, 좌변환, 우변환)
+        경우 "|":
+            반환 llvm빌드정수이항(ctx, LLOP_OR, 좌변환, 우변환)
+        경우 "^":
+            반환 llvm빌드정수이항(ctx, LLOP_XOR, 좌변환, 우변환)
+        경우 "<<":
+            반환 llvm빌드정수이항(ctx, LLOP_SHL, 좌변환, 우변환)
+        경우 ">>":
+            반환 llvm빌드정수이항(ctx, LLOP_ASHR, 좌변환, 우변환)
+        기본:
+            llvm오류설정(ctx, "미지원 이항 연산자: " + 연산자)
+            반환 llvm상수정수(0, LLTY_I64)
+
+// ================================================================
+//  단항 표현식 생성
+// ================================================================
+
+함수 llvm단항생성(목록 ctx, 목록 node):
+    문자 연산자 = node["연산자"]
+    목록 피연산자 = llvm표현식생성(ctx, node["피연산자"])
+    선택 연산자:
+        경우 "-":
+            만약 llvm타입은실수형(피연산자["타입코드"]):
+                반환 llvm빌드fneg(ctx, 피연산자)
+            반환 llvm빌드neg(ctx, 피연산자)
+        경우 "아니다":
+            목록 i1값 = llvm i1변환(ctx, 피연산자)
+            목록 일 = llvm상수참()
+            반환 llvm빌드정수이항(ctx, LLOP_XOR, i1값, 일)
+        경우 "~":
+            목록 음일 = llvm상수정수(-1, 피연산자["타입코드"])
+            반환 llvm빌드정수이항(ctx, LLOP_XOR, 피연산자, 음일)
+        기본:
+            반환 피연산자
+
+// ================================================================
+//  대입 생성
+// ================================================================
+
+함수 llvm대입생성(목록 ctx, 목록 node):
+    목록 값 = llvm표현식생성(ctx, node["값"])
+    목록 대상 = node["대상"]
+
+    // 인덱스 대입: arr[i] = val  §LLVM-SH v0.9.0
+    만약 대상["종류"] == NODE_INDEX:
+        목록 배열값 = llvm표현식생성(ctx, 대상["배열"])
+        목록 인덱스값 = llvm표현식생성(ctx, 대상["인덱스"])
+        목록 i64val  = llvm타입강제변환(ctx, 값, LLTY_I64)
+        목록 idx64   = llvm타입강제변환(ctx, 인덱스값, LLTY_I64)
+        llvm빌드call(ctx, LLTY_VOID, "@kc_arr_set_i64",
+                      [배열값, idx64, i64val])
+        반환 값
+
+    // 멤버 대입: obj.field = val
+    만약 대상["종류"] == NODE_MEMBER:
+        목록 objval = llvm표현식생성(ctx, 대상["객체"])
+        목록 fieldstr = llvm문자열상수(ctx, 대상["이름"])
+        목록 i64val = llvm타입강제변환(ctx, 값, LLTY_I64)
+        llvm빌드call(ctx, LLTY_VOID, "@kc_obj_set",
+                      [objval, fieldstr, i64val])
+        반환 값
+
+    // 일반 식별자 대입
+    문자 대상이름 = 대상["이름"]
+    목록 ptr값 = llvm변수조회(ctx, 대상이름)
+    만약 ptr값 == 없음:
+        llvm오류설정(ctx, "대입 대상 미정의: " + 대상이름)
+        반환 값
+
+    정수 목표타입 = llvm타입조회(ctx, 대상이름)
+    목록 변환값 = llvm타입강제변환(ctx, 값, 목표타입)
+    llvm빌드store(ctx, 변환값, ptr값)
+    반환 변환값
+
+// ================================================================
+//  함수 호출 생성
+// ================================================================
+
+함수 llvm호출생성(목록 ctx, 목록 node):
+    목록 calleenode = node["함수"]
+    문자 callee이름 = ""
+    만약 "이름" 있음 calleenode:
+        callee이름 = calleenode["이름"]
+
+    // 인수 생성
+    목록 인수목록 = []
+    만약 "인수" 있음 node:
+        정수 i = 0
+        동안 i < 길이(node["인수"]):
+            목록 인수값 = llvm표현식생성(ctx, node["인수"][i])
+            인수목록 += [인수값]
+            i = i + 1
+
+    // 클래스 생성자 탐지: callee가 등록된 클래스 이름이면 kc_obj_new 호출
+    만약 "클래스목록" 있음 ctx:
+        만약 callee이름 있음 ctx["클래스목록"]:
+            목록 namestr = llvm문자열상수(ctx, callee이름)
+            목록 objptr  = llvm빌드call(ctx, LLTY_PTR, "@kc_obj_new", [namestr])
+            // 초기화 메서드 호출 (있으면): ClassName__초기화(self, args...)
+            문자 init이름 = "@" + callee이름 + "__초기화"
+            만약 init이름 있음 ctx["함수환경"]:
+                목록 initargs = [objptr]
+                각각 a 안에 인수목록:
+                    initargs += [a]
+                llvm빌드call(ctx, LLTY_VOID, init이름, initargs)
+            반환 objptr
+
+    // 메서드 호출: obj.method(args) → ClassName__method(obj, args)
+    만약 calleenode["종류"] == NODE_MEMBER:
+        목록 objval = llvm표현식생성(ctx, calleenode["객체"])
+        문자 method이름 = "@" + callee이름  // 단순 매핑 (TODO: 타입 추론)
+        목록 methodargs = [objval]
+        각각 a 안에 인수목록:
+            methodargs += [a]
+        반환 llvm빌드call(ctx, LLTY_I64, method이름, methodargs)
+
+    // 일반 함수 호출
+    문자 함수이름 = "@" + callee이름
+
+    // 내장 → 런타임 함수 이름 매핑
+    정수 첫인수타입 = LLTY_I64
+    만약 길이(인수목록) > 0:
+        첫인수타입 = 인수목록[0]["타입코드"]
+    문자 rt이름 = kcode내장→런타임(callee이름, 첫인수타입)
+    만약 rt이름 != callee이름:
+        함수이름 = "@" + rt이름
+
+    // 반환 타입 추론 (함수 환경에서)
+    정수 반환타입 = LLTY_I64
+    만약 callee이름 있음 ctx["함수환경"]:
+        목록 func = ctx["함수환경"][callee이름]
+        만약 "반환타입" 있음 func:
+            반환타입 = func["반환타입"]
+
+    반환 llvm빌드call(ctx, 반환타입, 함수이름, 인수목록)
+
+// ================================================================
+//  인덱스 접근 생성 (배열[i])
+// ================================================================
+
+함수 llvm인덱스생성(목록 ctx, 목록 node):
+    // 배열 → 런타임 함수로 위임 (kc_arr_get)
+    목록 배열값 = llvm표현식생성(ctx, node["배열"])
+    목록 인덱스값 = llvm표현식생성(ctx, node["인덱스"])
+    목록 인수 = [배열값, 인덱스값]
+    반환 llvm빌드call(ctx, LLTY_I64, "@kc_arr_get_i64", 인수)
+
+// ================================================================
+//  타입 강제 변환 헬퍼
+// ================================================================
+
+함수 llvm타입강제변환(목록 ctx, 목록 값, 정수 목표타입):
+    정수 원타입 = 값["타입코드"]
+    만약 원타입 == 목표타입:
+        반환 값
+    // i1 → i64
+    만약 원타입 == LLTY_I1 그리고 llvm타입은정수형(목표타입):
+        반환 llvm빌드zext(ctx, 값, 목표타입)
+    // i32 → i64
+    만약 원타입 == LLTY_I32 그리고 목표타입 == LLTY_I64:
+        반환 llvm빌드sext(ctx, 값, 목표타입)
+    // i64 → f64
+    만약 llvm타입은정수형(원타입) 그리고 llvm타입은실수형(목표타입):
+        반환 llvm빌드sitofp(ctx, 값, 목표타입)
+    // f64 → i64
+    만약 llvm타입은실수형(원타입) 그리고 llvm타입은정수형(목표타입):
+        반환 llvm빌드fptosi(ctx, 값, 목표타입)
+    // 그 외 — 그냥 반환 (비트 레이아웃 동일 가정)
+    반환 값
+
+// ================================================================
+//  선택문 (switch/case) 생성  §LLVM-SH v0.6.0
+// ================================================================
+// 전략:
+//   정수 선택값 → LLVM switch 명령어 직접 활용
+//   문자열/실수 선택값 → icmp 체인으로 변환 (if-else ladder)
+
+정의 llvm선택생성(목록 ctx, 목록 node, 정수 반환타입):
+    목록 선택값 = llvm표현식생성(ctx, node["조건"])
+    문자 끝레이블 = llvm새레이블(ctx, "sw.end")
+
+    목록 경우목록 = node["경우목록"]
+    정수 경우수 = 길이(경우목록)
+    문자 기본레이블 = 끝레이블   // 기본은 끝으로 (명시적 기본 경우가 있으면 교체)
+
+    // 기본(default) 경우 확인
+    정수 기본인덱스 = -1
+    정수 i = 0
+    동안 i < 경우수:
+        목록 경우 = 경우목록[i]
+        만약 경우["종류"] == NODE_DEFAULT:
+            기본인덱스 = i
+        i = i + 1
+
+    만약 기본인덱스 >= 0:
+        기본레이블 = llvm새레이블(ctx, "sw.default")
+
+    // 정수 선택값이면 LLVM switch 명령어 사용
+    논리 정수모드 = llvm타입은정수형(선택값["타입코드"])
+
+    만약 정수모드:
+        // switch 테이블 구성
+        목록 switch경우목록 = []
+        i = 0
+        동안 i < 경우수:
+            목록 경우 = 경우목록[i]
+            만약 경우["종류"] == NODE_CASE:
+                문자 경우레이블 = llvm새레이블(ctx, "sw.case." + 문자변환(i))
+                만약 "값" 있음 경우:
+                    switch경우목록 += [목록 {
+                        "값": 경우["값"]["값"],
+                        "레이블": 경우레이블,
+                        "인덱스": i,
+                    }]
+            i = i + 1
+
+        llvm빌드switch(ctx, 선택값, 기본레이블, switch경우목록)
+
+        // 각 경우 블록 생성
+        i = 0
+        동안 i < 길이(switch경우목록):
+            목록 항목 = switch경우목록[i]
+            정수 경우인덱스 = llvm블록추가(ctx, 항목["레이블"])
+            llvm블록전환(ctx, 경우인덱스)
+            llvm블록레이블삽입(ctx, 항목["레이블"])
+            목록 경우node = 경우목록[항목["인덱스"]]
+            만약 "본문" 있음 경우node:
+                llvm블록생성(ctx, 경우node["본문"], 반환타입)
+            목록 경우bb = llvm현재블록(ctx)
+            만약 경우bb["종료됨"] == 거짓:
+                llvm빌드br(ctx, 끝레이블)
+            i = i + 1
+    아니면:
+        // 문자열/실수 — icmp 체인 (if-else ladder)
+        i = 0
+        동안 i < 경우수:
+            목록 경우 = 경우목록[i]
+            만약 경우["종류"] == NODE_CASE:
+                문자 경우레이블 = llvm새레이블(ctx, "sw.case." + 문자변환(i))
+                문자 다음레이블 = 끝레이블
+                만약 i + 1 < 경우수:
+                    다음레이블 = llvm새레이블(ctx, "sw.next." + 문자변환(i))
+
+                목록 경우값 = llvm표현식생성(ctx, 경우["값"])
+                목록 동등 = llvm빌드icmp(ctx, LLCMP_EQ,
+                    llvm타입강제변환(ctx, 선택값, 경우값["타입코드"]),
+                    경우값)
+                llvm빌드br조건(ctx, 동등, 경우레이블, 다음레이블)
+
+                정수 경우인덱스 = llvm블록추가(ctx, 경우레이블)
+                llvm블록전환(ctx, 경우인덱스)
+                llvm블록레이블삽입(ctx, 경우레이블)
+                만약 "본문" 있음 경우:
+                    llvm블록생성(ctx, 경우["본문"], 반환타입)
+                목록 경우bb = llvm현재블록(ctx)
+                만약 경우bb["종료됨"] == 거짓:
+                    llvm빌드br(ctx, 끝레이블)
+
+                만약 i + 1 < 경우수:
+                    정수 다음인덱스 = llvm블록추가(ctx, 다음레이블)
+                    llvm블록전환(ctx, 다음인덱스)
+                    llvm블록레이블삽입(ctx, 다음레이블)
+            i = i + 1
+
+    // 기본(default) 블록
+    만약 기본인덱스 >= 0:
+        정수 기본블록인덱스 = llvm블록추가(ctx, 기본레이블)
+        llvm블록전환(ctx, 기본블록인덱스)
+        llvm블록레이블삽입(ctx, 기본레이블)
+        목록 기본경우 = 경우목록[기본인덱스]
+        만약 "본문" 있음 기본경우:
+            llvm블록생성(ctx, 기본경우["본문"], 반환타입)
+        목록 기본bb = llvm현재블록(ctx)
+        만약 기본bb["종료됨"] == 거짓:
+            llvm빌드br(ctx, 끝레이블)
+
+    // 합류 블록
+    정수 끝인덱스 = llvm블록추가(ctx, 끝레이블)
+    llvm블록전환(ctx, 끝인덱스)
+    llvm블록레이블삽입(ctx, 끝레이블)
+
+// ================================================================
+//  예외 처리 — 시도/실패시/항상  §LLVM-SH v0.6.0
+// ================================================================
+// 구현 전략: setjmp/longjmp 기반 런타임 예외 스택
+//   kc_try_begin()  → 예외 환경 push + setjmp
+//   kc_try_end()    → 예외 환경 pop
+//   kc_throw(msg)   → longjmp (런타임 예외 발생)
+//   kc_catch_msg()  → 현재 예외 메시지 반환
+//
+// IR 패턴:
+//   %setjmp_ret = call i32 @kc_try_begin()
+//   %is_exc     = icmp ne i32 %setjmp_ret, 0
+//   br i1 %is_exc, label %catch, label %try_body
+// try_body:
+//   ... 본문 ...
+//   call void @kc_try_end()
+//   br label %finally
+// catch:
+//   ... 실패시 본문 ...
+//   call void @kc_try_end()
+//   br label %finally
+// finally:
+//   ... 항상 본문 ...
+
+정의 llvm시도생성(목록 ctx, 목록 node, 정수 반환타입):
+    문자 try본문레이블  = llvm새레이블(ctx, "try.body")
+    문자 catch레이블    = llvm새레이블(ctx, "try.catch")
+    문자 finally레이블  = llvm새레이블(ctx, "try.finally")
+    문자 끝레이블       = llvm새레이블(ctx, "try.end")
+
+    논리 catch있음   = "실패시본문" 있음 node 그리고 node["실패시본문"] != 없음
+    논리 finally있음 = "항상본문"   있음 node 그리고 node["항상본문"]   != 없음
+
+    // kc_try_begin() 호출 → i32 반환 (0 = 정상, 비0 = 예외)
+    목록 setjmp결과 = llvm빌드call(ctx, LLTY_I32, "@kc_try_begin", [])
+    목록 영i32 = llvm상수정수(0, LLTY_I32)
+    목록 예외여부 = llvm빌드icmp(ctx, LLCMP_NE, setjmp결과, 영i32)
+
+    만약 catch있음:
+        llvm빌드br조건(ctx, 예외여부, catch레이블, try본문레이블)
+    아니면:
+        llvm빌드br조건(ctx, 예외여부, finally레이블, try본문레이블)
+
+    // ── 시도 본문 블록 ──────────────────────
+    정수 try인덱스 = llvm블록추가(ctx, try본문레이블)
+    llvm블록전환(ctx, try인덱스)
+    llvm블록레이블삽입(ctx, try본문레이블)
+    llvm블록생성(ctx, node["본문"], 반환타입)
+    목록 try_bb = llvm현재블록(ctx)
+    만약 try_bb["종료됨"] == 거짓:
+        llvm빌드call(ctx, LLTY_VOID, "@kc_try_end", [])
+        llvm빌드br(ctx, finally레이블)
+
+    // ── 실패시 블록 ──────────────────────────
+    만약 catch있음:
+        정수 catch인덱스 = llvm블록추가(ctx, catch레이블)
+        llvm블록전환(ctx, catch인덱스)
+        llvm블록레이블삽입(ctx, catch레이블)
+
+        // 예외 메시지 변수 등록 (실패시 본문에서 사용 가능)
+        만약 "예외변수" 있음 node:
+            문자 exc이름 = node["예외변수"]
+            목록 exc_msg = llvm빌드call(ctx, LLTY_PTR, "@kc_catch_msg", [])
+            목록 exc_ptr = llvm빌드alloca(ctx, LLTY_PTR, exc이름 + ".addr")
+            llvm빌드store(ctx, exc_msg, exc_ptr)
+            llvm변수등록(ctx, exc이름, exc_ptr)
+            llvm타입등록(ctx, exc이름, LLTY_PTR)
+
+        llvm블록생성(ctx, node["실패시본문"], 반환타입)
+        목록 catch_bb = llvm현재블록(ctx)
+        만약 catch_bb["종료됨"] == 거짓:
+            llvm빌드call(ctx, LLTY_VOID, "@kc_try_end", [])
+            llvm빌드br(ctx, finally레이블)
+
+    // ── 항상 블록 (finally) ─────────────────
+    정수 finally인덱스 = llvm블록추가(ctx, finally레이블)
+    llvm블록전환(ctx, finally인덱스)
+    llvm블록레이블삽입(ctx, finally레이블)
+    만약 finally있음:
+        llvm블록생성(ctx, node["항상본문"], 반환타입)
+    목록 fin_bb = llvm현재블록(ctx)
+    만약 fin_bb["종료됨"] == 거짓:
+        llvm빌드br(ctx, 끝레이블)
+
+    // ── 끝 블록 ─────────────────────────────
+    정수 끝인덱스 = llvm블록추가(ctx, 끝레이블)
+    llvm블록전환(ctx, 끝인덱스)
+    llvm블록레이블삽입(ctx, 끝레이블)
+
+// 오류 발생 (오류 키워드 / raise)
+정의 llvm오류발생생성(목록 ctx, 목록 node):
+    목록 메시지값 = llvm표현식생성(ctx, node["메시지"])
+    // 문자열 타입 강제변환
+    목록 str값 = llvm타입강제변환(ctx, 메시지값, LLTY_PTR)
+    llvm빌드call(ctx, LLTY_VOID, "@kc_throw", [str값])
+    llvm빌드unreachable(ctx)
+
+// i1 (논리) 값으로 변환
+함수 llvm i1변환(목록 ctx, 목록 값):
+    만약 값["타입코드"] == LLTY_I1:
+        반환 값
+    만약 llvm타입은정수형(값["타입코드"]):
+        // i64 != 0 → i1
+        목록 영 = llvm상수정수(0, 값["타입코드"])
+        반환 llvm빌드icmp(ctx, LLCMP_NE, 값, 영)
+    만약 llvm타입은실수형(값["타입코드"]):
+        목록 영f = llvm상수실수(0.0)
+        반환 llvm빌드fcmp(ctx, LLCMP_ONE, 값, 영f)
+    반환 값
+
+// ================================================================
+//  멤버 접근 생성 (obj.field)  §LLVM-SH v0.7.0
+// ================================================================
+// 전략: kc_obj_get(ptr obj, ptr field_name) → i64
+//       kc_obj_set(ptr obj, ptr field_name, i64 val) — 대입에서 사용
+
+함수 llvm멤버접근생성(목록 ctx, 목록 node):
+    목록 objval   = llvm표현식생성(ctx, node["객체"])
+    목록 fieldstr = llvm문자열상수(ctx, node["이름"])
+    반환 llvm빌드call(ctx, LLTY_I64, "@kc_obj_get", [objval, fieldstr])
+
+// ================================================================
+//  클래스(객체) 선언 생성  §LLVM-SH v0.7.0
+// ================================================================
+// 전략:
+//   - 클래스 이름을 ctx["클래스목록"]에 등록
+//   - 내부 메서드 정의를 최상위 함수로 emit (첫 번째 인수 = self: ptr)
+//   - 생성자는 NODE_CALL 에서 class_name() 형태로 탐지
+//   - 실제 구조: kc_obj_new("ClassName") → ptr
+
+정의 llvm클래스선언생성(목록 ctx, 목록 node):
+    문자 클래스명 = node["이름"]
+
+    // 클래스 레지스트리 초기화
+    만약 아니다 "클래스목록" 있음 ctx:
+        ctx["클래스목록"] = 목록 {}
+
+    ctx["클래스목록"][클래스명] = 참
+
+    // IR 주석
+    llvm전역추가(ctx, "; 클래스 " + 클래스명 + " (§LLVM-SH v0.7.0)")
+
+    // 클래스 본문에서 메서드(함수) 정의만 추출하여 emit
+    만약 "본문" 있음 node 그리고 node["본문"] != 없음:
+        목록 본문 = node["본문"]
+        각각 멤버 안에 본문["자식들"]:
+            정수 mk = 멤버["종류"]
+            만약 mk == NODE_FUNC_DECL 또는 mk == NODE_VOID_DECL:
+                // 메서드 이름: ClassName__methodName
+                문자 원래이름 = 멤버["이름"]
+                멤버["이름"] = 클래스명 + "__" + 원래이름
+                // 첫 번째 인수로 self 추가
+                목록 self매개변수 = 목록 {
+                    "이름": "self",
+                    "타입": "목록",
+                }
+                목록 모든매개변수 = [self매개변수]
+                만약 "매개변수" 있음 멤버:
+                    각각 p 안에 멤버["매개변수"]:
+                        모든매개변수 += [p]
+                멤버["매개변수"] = 모든매개변수
+                llvm함수선언생성(ctx, 멤버)
+
+// ================================================================
+//  람다 (익명 함수) 생성 (NODE_LAMBDA)  §LLVM-SH v0.9.0
+// ================================================================
+// 전략: 람다를 전역 익명 함수 __lambda_N 으로 리프트 (클로저 미지원)
+//   본문은 단일 표현식 → 그 값을 i64 로 ret
+//   함수 포인터 (ptr @__lambda_N) 값을 반환
+
+함수 llvm람다생성(목록 ctx, 목록 node):
+    // 람다 번호 할당
+    만약 아니다 "람다수" 있음 ctx:
+        ctx["람다수"] = 0
+    정수 번호 = ctx["람다수"]
+    ctx["람다수"] = 번호 + 1
+    문자 람다이름 = "__lambda_" + 문자변환(번호)
+
+    // 현재 함수 상태 저장
+    목록 이전함수       = ctx["현재함수"]
+    정수 이전블록인덱스 = ctx["현재블록인덱스"]
+    정수 이전임시번호   = ctx["임시번호"]
+    목록 이전타입환경   = ctx["타입환경"]
+    목록 이전변수환경   = ctx["변수환경"]
+
+    // 매개변수 변환
+    목록 params = []
+    만약 "매개변수" 있음 node:
+        정수 i = 0
+        동안 i < 길이(node["매개변수"]):
+            목록 p = node["매개변수"][i]
+            정수 ptype = LLTY_I64
+            만약 "타입" 있음 p:
+                ptype = kcode타입→LLTY(p["타입"])
+            params += [목록 { "이름": p["이름"], "타입코드": ptype }]
+            i = i + 1
+
+    // 람다 함수 시작 (반환타입 = i64)
+    llvm함수정의시작(ctx, 람다이름, LLTY_I64, params, LLLNK_INTERNAL)
+
+    // 본문 표현식 → ret
+    만약 "본문" 있음 node 그리고 node["본문"] != 없음:
+        목록 결과 = llvm표현식생성(ctx, node["본문"])
+        목록 ret값 = llvm타입강제변환(ctx, 결과, LLTY_I64)
+        llvm빌드ret(ctx, ret값)
+    아니면:
+        llvm빌드ret(ctx, llvm상수정수(0, LLTY_I64))
+
+    llvm함수정의종료(ctx)
+
+    // 현재 함수 상태 복원
+    ctx["현재함수"]       = 이전함수
+    ctx["현재블록인덱스"] = 이전블록인덱스
+    ctx["임시번호"]       = 이전임시번호
+    ctx["타입환경"]       = 이전타입환경
+    ctx["변수환경"]       = 이전변수환경
+
+    // 함수 포인터 값 반환 (LLTY_PTR)
+    반환 llvm값전역("@" + 람다이름, LLTY_PTR)
+
+// ================================================================
+//  배열 리터럴 생성 (NODE_ARRAY_LIT)  §LLVM-SH v0.8.0
+// ================================================================
+// 전략: kc_arr_new(capacity) 호출 후 각 원소를 kc_arr_push 로 삽입
+//   반환 타입: ptr (KcArray*)
+
+함수 llvm배열리터럴생성(목록 ctx, 목록 node):
+    정수 원소수 = 길이(node["자식들"])
+    목록 cap값 = llvm상수정수(원소수, LLTY_I64)
+    목록 arr = llvm빌드call(ctx, LLTY_PTR, "@kc_arr_new", [cap값])
+
+    정수 i = 0
+    동안 i < 원소수:
+        목록 elem = node["자식들"][i]
+        목록 v    = llvm표현식생성(ctx, elem)
+        목록 i64v = llvm타입강제변환(ctx, v, LLTY_I64)
+        llvm빌드call(ctx, LLTY_VOID, "@kc_arr_push", [arr, i64v])
+        i = i + 1
+
+    반환 arr
+
+// ================================================================
+//  사전 리터럴 생성 (NODE_DICT_LIT)  §LLVM-SH v0.8.0
+// ================================================================
+// 전략: kc_obj_new("") 로 빈 객체 생성 후 각 키/값 쌍을 kc_obj_set 으로 삽입
+//   반환 타입: ptr (KcObj*)
+
+함수 llvm사전리터럴생성(목록 ctx, 목록 node):
+    목록 emptystr = llvm문자열상수(ctx, "")
+    목록 obj = llvm빌드call(ctx, LLTY_PTR, "@kc_obj_new", [emptystr])
+
+    각각 entry 안에 node["자식들"]:
+        만약 "키" 있음 entry 그리고 "값" 있음 entry:
+            목록 key = llvm표현식생성(ctx, entry["키"])
+            목록 val = llvm표현식생성(ctx, entry["값"])
+            목록 keyptr = llvm타입강제변환(ctx, key, LLTY_PTR)
+            목록 i64val = llvm타입강제변환(ctx, val, LLTY_I64)
+            llvm빌드call(ctx, LLTY_VOID, "@kc_obj_set", [obj, keyptr, i64val])
+
+    반환 obj

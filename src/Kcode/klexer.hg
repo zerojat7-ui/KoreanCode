@@ -1,0 +1,498 @@
+// klexer.hg — Kcode 렉서 헤더
+// version : v35.1.0
+// klexer.h (v23.0.0) 기반 Kcode 문법으로 재작성
+
+// ================================================================
+//  토큰 종류 상수
+// ================================================================
+
+// ── 리터럴 ──────────────────────────────────────────
+변수 TOK_INT          = 0
+변수 TOK_FLOAT        = 1
+변수 TOK_STRING       = 2
+변수 TOK_CHAR_LIT     = 3
+변수 TOK_TRUE         = 4
+변수 TOK_FALSE        = 5
+변수 TOK_NULL         = 6
+변수 TOK_BIN          = 7
+변수 TOK_OCT          = 8
+변수 TOK_HEX          = 9
+
+// ── 식별자 ──────────────────────────────────────────
+변수 TOK_IDENT        = 10
+
+// ── 자료형 키워드 ────────────────────────────────────
+변수 TOK_KW_JEONGSU      = 11   // 정수
+변수 TOK_KW_SILSU         = 12   // 실수
+변수 TOK_KW_GEULJA        = 13   // 문자
+변수 TOK_KW_MUNJA         = 14   // 글자
+변수 TOK_KW_NOLI          = 15   // 논리
+변수 TOK_KW_EOPSEUM       = 16   // 없음
+변수 TOK_KW_HAENGNYEOL    = 17   // 행렬
+변수 TOK_KW_TENSOR        = 18   // 텐서
+변수 TOK_KW_ZERO_TENSOR   = 19   // 영텐서
+변수 TOK_KW_ONE_TENSOR    = 20   // 일텐서
+변수 TOK_KW_RAND_TENSOR   = 21   // 무작위텐서
+변수 TOK_KW_SAJIN         = 22   // 사진
+변수 TOK_KW_GEURIM        = 23   // 그림
+변수 TOK_KW_HAMSUFORM     = 24   // 함수형
+변수 TOK_KW_GOJUNG        = 25   // 고정
+
+// ── 제어문 키워드 ────────────────────────────────────
+변수 TOK_KW_MANYAK        = 30   // 만약
+변수 TOK_KW_ANIMYEON      = 31   // 아니면
+변수 TOK_KW_SEONTAEK      = 32   // 선택
+변수 TOK_KW_GYEONGWOO     = 33   // 경우
+변수 TOK_KW_GEUWOI        = 34   // 그외
+변수 TOK_KW_BANBOG        = 35   // 반복
+변수 TOK_KW_DONGAN        = 36   // 동안
+변수 TOK_KW_GAKGAK        = 37   // 각각
+변수 TOK_KW_ANE           = 38   // 안에
+변수 TOK_KW_BUTEO         = 39   // 부터
+변수 TOK_KW_KKAJI         = 40   // 까지
+변수 TOK_KW_MEOMCHUM      = 41   // 멈춤
+변수 TOK_KW_GEONNEO       = 42   // 건너뜀
+변수 TOK_KW_IDONG         = 43   // 이동
+
+// ── 함수/정의 키워드 ─────────────────────────────────
+변수 TOK_KW_HAMSU         = 50   // 함수
+변수 TOK_KW_JEONGUI       = 51   // 정의
+변수 TOK_KW_BANHWAN       = 52   // 반환
+변수 TOK_KW_KKEUTNAEM     = 53   // 끝냄
+
+// ── 자료구조 키워드 ──────────────────────────────────
+변수 TOK_KW_BAELYEOL      = 60   // 배열
+변수 TOK_KW_SAJEON        = 61   // 사전
+변수 TOK_KW_MOGLOG        = 62   // 목록
+변수 TOK_KW_GAEGCHE       = 63   // 객체
+변수 TOK_KW_YEOLGEEO      = 64   // 열거
+변수 TOK_KW_TEL           = 65   // 틀
+변수 TOK_KW_IEOBATGI      = 66   // 이어받기
+변수 TOK_KW_JASIN         = 67   // 자신
+변수 TOK_KW_BUMO          = 68   // 부모
+변수 TOK_KW_SAENGSEONG    = 69   // 생성
+
+// ── 예외 처리 키워드 ─────────────────────────────────
+변수 TOK_KW_SIDO          = 70   // 시도
+변수 TOK_KW_SILPAESI      = 71   // 실패시
+변수 TOK_KW_HANGSANG      = 72   // 항상
+변수 TOK_KW_ORU           = 73   // 오류
+
+// ── 모듈/입출력 키워드 ───────────────────────────────
+변수 TOK_KW_GAJIM         = 80   // 가짐
+변수 TOK_KW_ROBUTEO       = 81   // 로부터
+변수 TOK_KW_CHULRYEOK     = 82   // 출력
+변수 TOK_KW_CHULNO        = 83   // 출력없이
+변수 TOK_KW_IBRYEOK       = 84   // 입력
+변수 TOK_KW_FILEOPEN      = 85   // 파일열기
+
+// ── 이미지/렌더링/AI 키워드 ──────────────────────────
+변수 TOK_KW_HWAMYEON      = 90   // 화면
+변수 TOK_KW_HWAMYEON3D    = 91   // 화면3D
+변수 TOK_KW_AI_CONNECT    = 92   // AI연결
+변수 TOK_KW_GPU_RO        = 93   // 가속기
+변수 TOK_KW_KKUT_GPU      = 94   // 가속기끝
+
+// ── 가속기 내장 연산 (v23.0.0) ───────────────────────
+변수 TOK_KW_ACCEL_MATMUL     = 95   // 행렬곱
+변수 TOK_KW_ACCEL_MATADD     = 96   // 행렬합
+변수 TOK_KW_ACCEL_CONV       = 97   // 합성곱
+변수 TOK_KW_ACCEL_ACTIVATE   = 98   // 활성화
+변수 TOK_KW_ACCEL_TRANSPOSE  = 99   // 전치
+변수 TOK_KW_SAJIN_OPEN    = 100  // 사진열기
+변수 TOK_KW_GEURIM_MAKE   = 101  // 그림만들기
+
+// ── 스크립트 블록 키워드 ─────────────────────────────
+변수 TOK_KW_PYTHON        = 110  // 파이썬
+변수 TOK_KW_END_PYTHON    = 111  // 파이썬끝
+변수 TOK_KW_JAVA          = 112  // 자바
+변수 TOK_KW_END_JAVA      = 113  // 자바끝
+변수 TOK_KW_JS            = 114  // 자바스크립트
+변수 TOK_KW_END_JS        = 115  // 자바스크립트끝
+변수 TOK_KW_TS            = 116  // 타입스크립트     ★ 신규
+변수 TOK_KW_END_TS        = 117  // 타입스크립트끝   ★ 신규
+
+// ── 계약 시스템 ──────────────────────────────────────
+변수 TOK_KW_BEOPRYEONG       = 120  // 법령
+변수 TOK_KW_BEOPWIBAN         = 121  // 법위반
+변수 TOK_KW_BOKWON            = 122  // 복원지점
+변수 TOK_KW_JEONYEOK          = 123  // 전역
+변수 TOK_KW_HOEGWI            = 124  // 회귀
+변수 TOK_KW_DAECHE            = 125  // 대체
+변수 TOK_KW_GYEONGGO          = 126  // 경고
+변수 TOK_KW_BOGO              = 127  // 보고
+변수 TOK_KW_JUNGDAN           = 128  // 중단
+
+// ── 계약 계층 구조 (v4.2.0) ──────────────────────────
+변수 TOK_KW_HEONBEOB          = 130  // 헌법
+변수 TOK_KW_BEOMNYUL          = 131  // 법률
+변수 TOK_KW_GYUJEONG          = 132  // 규정
+변수 TOK_KW_KKUT_GYUJEONG     = 133  // 규정끝
+변수 TOK_KW_KKUT_BEOPRYEONG   = 134  // 법령끝
+변수 TOK_KW_KKUT_BEOPWIBAN    = 135  // 법위반끝
+변수 TOK_KW_JOHANG            = 136  // 조항
+
+// ── 파일 내장 함수 ───────────────────────────────────
+변수 TOK_KW_FILE_CLOSE        = 140  // 파일닫기
+변수 TOK_KW_FILE_READALL      = 141  // 파일전체읽기
+변수 TOK_KW_FILE_WRITEALL     = 142  // 파일전체쓰기
+변수 TOK_KW_FILE_READLINE     = 143  // 파일줄읽기
+변수 TOK_KW_FILE_WRITELINE    = 144  // 파일줄쓰기
+변수 TOK_KW_FILE_READ         = 145  // 파일읽기
+변수 TOK_KW_FILE_WRITE        = 146  // 파일쓰기
+변수 TOK_KW_FILE_EXISTS       = 147  // 파일있음
+변수 TOK_KW_FILE_SIZE         = 148  // 파일크기
+변수 TOK_KW_FILE_LIST         = 149  // 파일목록
+변수 TOK_KW_FILE_NAME         = 150  // 파일이름
+변수 TOK_KW_FILE_EXT          = 151  // 파일확장자
+변수 TOK_KW_DIR_MAKE          = 152  // 폴더만들기
+변수 TOK_KW_FILE_DELETE       = 153  // 파일지우기
+변수 TOK_KW_FILE_COPY         = 154  // 파일복사
+변수 TOK_KW_FILE_MOVE         = 155  // 파일이동
+
+// ── OS 시그널 시스템 (v6.0.0) ────────────────────────
+변수 TOK_KW_SINHOBATGI        = 160  // 신호받기
+변수 TOK_KW_KKUT_SINHOBATGI   = 161  // 신호받기끝
+변수 TOK_KW_SINHOMUSI         = 162  // 신호무시
+변수 TOK_KW_SINHOGIBON        = 163  // 신호기본
+변수 TOK_KW_SINHOBONEGI       = 164  // 신호보내기
+변수 TOK_KW_SIG_INT           = 165  // 중단신호
+변수 TOK_KW_SIG_TERM          = 166  // 종료신호
+변수 TOK_KW_SIG_KILL          = 167  // 강제종료
+변수 TOK_KW_SIG_CHLD          = 168  // 자식신호
+변수 TOK_KW_SIG_USR1          = 169  // 사용자신호1
+변수 TOK_KW_SIG_USR2          = 170  // 사용자신호2
+변수 TOK_KW_SIG_PIPE          = 171  // 연결신호
+변수 TOK_KW_SIG_ALRM          = 172  // 경보신호
+변수 TOK_KW_SIG_STOP          = 173  // 중지신호
+변수 TOK_KW_SIG_CONT          = 174  // 재개신호
+
+// ── 하드웨어 간섭(ISR) 시스템 ────────────────────────
+변수 TOK_KW_GANSEOB           = 180  // 간섭
+변수 TOK_KW_KKUT_GANSEOB      = 181  // 간섭끝
+변수 TOK_KW_GANSEOB_JAMGEUM   = 182  // 간섭잠금
+변수 TOK_KW_GANSEOB_HEOYONG   = 183  // 간섭허용
+변수 TOK_KW_IRQ_TIMER0        = 184  // 시간0넘침
+변수 TOK_KW_IRQ_TIMER1        = 185  // 시간1넘침
+변수 TOK_KW_IRQ_EXT0_RISE     = 186  // 외부0상승
+변수 TOK_KW_IRQ_EXT0_FALL     = 187  // 외부0하강
+변수 TOK_KW_IRQ_UART_RX       = 188  // 직렬수신
+
+// ── 행사(이벤트 루프) 시스템 ─────────────────────────
+변수 TOK_KW_HAENGSA_REG       = 190  // 행사등록
+변수 TOK_KW_KKUT_HAENGSA      = 191  // 행사등록끝
+변수 TOK_KW_HAENGSA_START     = 192  // 행사시작
+변수 TOK_KW_HAENGSA_STOP      = 193  // 행사중단
+변수 TOK_KW_HAENGSA_EMIT      = 194  // 행사발생
+변수 TOK_KW_HAENGSA_OFF       = 195  // 행사해제
+
+// ── MCP 시스템 (v14.0.1) ─────────────────────────────
+변수 TOK_KW_MCP_SERVER        = 200  // MCP서버
+변수 TOK_KW_KKUT_MCP_SERVER   = 201  // MCP서버끝
+변수 TOK_KW_MCP_TOOL          = 202  // MCP도구
+변수 TOK_KW_KKUT_MCP_TOOL     = 203  // MCP도구끝
+변수 TOK_KW_MCP_RESOURCE      = 204  // MCP자원
+변수 TOK_KW_KKUT_MCP_RESOURCE = 205  // MCP자원끝
+변수 TOK_KW_MCP_PROMPT        = 206  // MCP프롬프트
+변수 TOK_KW_KKUT_MCP_PROMPT   = 207  // MCP프롬프트끝
+
+// ── 산업/임베디드 (v16.0.0) ──────────────────────────
+변수 TOK_KW_TIMER_BLOCK       = 210  // 타이머
+변수 TOK_KW_TIMER_KKUT        = 211  // 타이머끝
+변수 TOK_KW_GPIO_WRITE        = 212  // GPIO쓰기
+변수 TOK_KW_GPIO_READ         = 213  // GPIO읽기
+변수 TOK_KW_I2C_CONNECT       = 214  // I2C연결
+변수 TOK_KW_I2C_READ          = 215  // I2C읽기
+변수 TOK_KW_I2C_WRITE         = 216  // I2C쓰기
+변수 TOK_KW_SPI_SEND          = 217  // SPI전송
+변수 TOK_KW_SPI_READ          = 218  // SPI읽기
+변수 TOK_KW_UART_SETUP        = 219  // UART설정
+변수 TOK_KW_UART_SEND         = 220  // UART전송
+변수 TOK_KW_UART_READ         = 221  // UART읽기
+변수 TOK_KW_MODBUS_CONNECT    = 222  // Modbus연결
+변수 TOK_KW_MODBUS_READ       = 223  // Modbus읽기
+변수 TOK_KW_MODBUS_WRITE      = 224  // Modbus쓰기
+변수 TOK_KW_MODBUS_DISCONNECT = 225  // Modbus연결끊기
+변수 TOK_KW_CAN_FILTER        = 226  // CAN필터
+변수 TOK_KW_CAN_SEND          = 227  // CAN전송
+변수 TOK_KW_CAN_READ          = 228  // CAN읽기
+변수 TOK_KW_MQTT_CONNECT      = 229  // MQTT연결
+변수 TOK_KW_MQTT_PUBLISH      = 230  // MQTT발행
+변수 TOK_KW_MQTT_SUBSCRIBE    = 231  // MQTT구독
+변수 TOK_KW_MQTT_DISCONNECT   = 232  // MQTT연결끊기
+변수 TOK_KW_ROS2_NODE         = 233  // ROS2노드
+변수 TOK_KW_ROS2_END          = 234  // ROS2끝
+변수 TOK_KW_ROS2_PUBLISH      = 235  // ROS2발행
+변수 TOK_KW_ROS2_SUBSCRIBE    = 236  // ROS2구독
+
+// ── 안전 규격 (v17.0.0) ──────────────────────────────
+변수 TOK_KW_SIL               = 240  // SIL
+변수 TOK_KW_WATCHDOG          = 241  // 워치독
+변수 TOK_KW_WATCHDOG_END      = 242  // 워치독끝
+변수 TOK_KW_FAULT_TOL         = 243  // 결함허용
+변수 TOK_KW_FAULT_TOL_END     = 244  // 결함허용끝
+변수 TOK_KW_FAILSAFE          = 245  // 페일세이프
+변수 TOK_KW_EMERG_STOP        = 246  // 긴급정지
+
+// ── 온디바이스 AI (v18.0.0) ──────────────────────────
+변수 TOK_KW_AI_MODEL          = 250  // AI모델
+변수 TOK_KW_AI_MODEL_END      = 251  // AI모델끝
+변수 TOK_KW_TINYML            = 252  // TinyML
+변수 TOK_KW_TINYML_END        = 253  // TinyML끝
+변수 TOK_KW_AI_LOAD           = 254  // AI불러오기
+변수 TOK_KW_AI_PREDICT        = 255  // AI추론
+변수 TOK_KW_AI_TRAIN_STEP     = 256  // AI학습단계
+변수 TOK_KW_AI_SAVE           = 257  // AI저장
+변수 TOK_KW_FEDERATED         = 258  // 연합학습
+변수 TOK_KW_FEDERATED_END     = 259  // 연합학습끝
+
+// ── 온톨로지 시스템 (v18.5.0) ────────────────────────
+변수 TOK_KW_ONTOLOGY          = 260  // 온톨로지
+변수 TOK_KW_ONTOLOGY_END      = 261  // 온톨로지끝
+변수 TOK_KW_ONT_CONCEPT       = 262  // 개념
+변수 TOK_KW_ONT_CONCEPT_END   = 263  // 개념끝
+변수 TOK_KW_ONT_PROP          = 264  // 속성
+변수 TOK_KW_ONT_RELATE        = 265  // 관계
+변수 TOK_KW_ONT_QUERY_BLOCK   = 266  // 질의
+변수 TOK_KW_ONT_INFER_BLOCK   = 267  // 추론
+변수 TOK_KW_ONT_SENSITIVE     = 268  // 민감
+변수 TOK_KW_ONT_ANON          = 269  // 익명화
+
+// ── Concept Identity / Vector Space (v22.0.0) ────────
+변수 TOK_KW_SEMANTIC_INFER    = 270  // 의미추론
+변수 TOK_KW_SEMANTIC_INFER_END= 271  // 의미추론끝
+변수 TOK_KW_VECTORIZE         = 272  // 벡터화
+변수 TOK_KW_VECTORIZE_END     = 273  // 벡터화끝
+변수 TOK_KW_SEM_RECON         = 274  // 의미복원
+변수 TOK_KW_SEM_RECON_END     = 275  // 의미복원끝
+변수 TOK_KW_REPRO_LABEL       = 276  // 재생산라벨
+변수 TOK_KW_REPRO_LABEL_END   = 277  // 재생산라벨끝
+
+// ── 지식 뱅크 (Stage 24) ─────────────────────────────
+변수 TOK_KW_KBANK             = 280  // 지식뱅크
+변수 TOK_KW_KBANK_LOAD        = 281  // 지식불러오기
+변수 TOK_KW_KBANK_COMPARE     = 282  // 지식비교
+변수 TOK_KW_REPRO_LABEL_DECL  = 283  // 재생산라벨선언
+변수 TOK_KW_KBANK_PROOF       = 284  // 지식증거출력
+
+// ── 전처리기 ─────────────────────────────────────────
+변수 TOK_PP_DEFINE            = 290  // #정의
+변수 TOK_PP_IF                = 291  // #만약
+변수 TOK_PP_ELSE              = 292  // #아니면
+변수 TOK_PP_ENDIF             = 293  // #끝
+변수 TOK_PP_IFDEF             = 294  // #만약있으면
+변수 TOK_PP_IFNDEF            = 295  // #만약없으면
+변수 TOK_PP_INCLUDE           = 296  // #포함
+변수 TOK_PP_GPU               = 297  // #GPU사용
+
+// ── 산술 연산자 ──────────────────────────────────────
+변수 TOK_PLUS                 = 300  // +
+변수 TOK_MINUS                = 301  // -
+변수 TOK_STAR                 = 302  // *
+변수 TOK_SLASH                = 303  // /
+변수 TOK_PERCENT              = 304  // %
+변수 TOK_STARSTAR             = 305  // **
+
+// ── 비교 연산자 ──────────────────────────────────────
+변수 TOK_EQEQ                 = 310  // ==
+변수 TOK_BANGEQ               = 311  // !=
+변수 TOK_GT                   = 312  // >
+변수 TOK_LT                   = 313  // <
+변수 TOK_GTEQ                 = 314  // >=
+변수 TOK_LTEQ                 = 315  // <=
+
+// ── 논리 연산자 (한글) ───────────────────────────────
+변수 TOK_KW_AND               = 320  // 그리고
+변수 TOK_KW_OR                = 321  // 또는
+변수 TOK_KW_NOT               = 322  // 아니다
+
+// ── 비트 연산자 ──────────────────────────────────────
+변수 TOK_AMP                  = 330  // &
+변수 TOK_PIPE                 = 331  // |
+변수 TOK_CARET                = 332  // ^
+변수 TOK_TILDE                = 333  // ~
+변수 TOK_LTLT                 = 334  // <<
+변수 TOK_GTGT                 = 335  // >>
+
+// ── 대입 연산자 ──────────────────────────────────────
+변수 TOK_EQ                   = 340  // =
+변수 TOK_PLUSEQ               = 341  // +=
+변수 TOK_MINUSEQ              = 342  // -=
+변수 TOK_STAREQ               = 343  // *=
+변수 TOK_SLASHEQ              = 344  // /=
+변수 TOK_PERCENTEQ            = 345  // %=
+
+// ── 특수 기호 ────────────────────────────────────────
+변수 TOK_ARROW                = 350  // =>
+변수 TOK_DOTS                 = 351  // ...
+변수 TOK_LPAREN               = 352  // (
+변수 TOK_RPAREN               = 353  // )
+변수 TOK_LBRACKET             = 354  // [
+변수 TOK_RBRACKET             = 355  // ]
+변수 TOK_LBRACE               = 356  // {
+변수 TOK_RBRACE               = 357  // }
+변수 TOK_COMMA                = 358  // ,
+변수 TOK_COLON                = 359  // :
+변수 TOK_DOT                  = 360  // .
+
+// ── 들여쓰기 ─────────────────────────────────────────
+변수 TOK_NEWLINE              = 370  // 줄끝
+변수 TOK_INDENT               = 371  // 들여쓰기
+변수 TOK_DEDENT               = 372  // 내어쓰기
+
+// ── 특수 ─────────────────────────────────────────────
+변수 TOK_EOF                  = 380
+변수 TOK_ERROR                = 381
+
+// ================================================================
+//  렉서 상수
+// ================================================================
+변수 KCODE_MAX_INDENT_DEPTH   = 128
+변수 KCODE_MAX_PEEK           = 8
+
+// ================================================================
+//  키워드 테이블
+//  [ [키워드문자열, 토큰번호], ... ]
+// ================================================================
+변수 KW_TABLE = [
+    // ★ 긴 것 먼저 (부분매칭 방지)
+    ["파이썬끝",           TOK_KW_END_PYTHON],
+    ["자바스크립트끝",     TOK_KW_END_JS],
+    ["자바스크립트",       TOK_KW_JS],
+    ["타입스크립트끝",     TOK_KW_END_TS],      // ★ 신규
+    ["타입스크립트",       TOK_KW_TS],           // ★ 신규
+    ["자바끝",             TOK_KW_END_JAVA],
+    ["파이썬",             TOK_KW_PYTHON],
+    ["자바",               TOK_KW_JAVA],
+    ["무작위텐서",         TOK_KW_RAND_TENSOR],
+    ["그림만들기",         TOK_KW_GEURIM_MAKE],
+    ["사진열기",           TOK_KW_SAJIN_OPEN],
+    ["파일전체읽기",       TOK_KW_FILE_READALL],
+    ["파일전체쓰기",       TOK_KW_FILE_WRITEALL],
+    ["파일줄읽기",         TOK_KW_FILE_READLINE],
+    ["파일줄쓰기",         TOK_KW_FILE_WRITELINE],
+    ["파일확장자",         TOK_KW_FILE_EXT],
+    ["파일이름",           TOK_KW_FILE_NAME],
+    ["파일목록",           TOK_KW_FILE_LIST],
+    ["파일있음",           TOK_KW_FILE_EXISTS],
+    ["파일닫기",           TOK_KW_FILE_CLOSE],
+    ["파일읽기",           TOK_KW_FILE_READ],
+    ["파일쓰기",           TOK_KW_FILE_WRITE],
+    ["파일크기",           TOK_KW_FILE_SIZE],
+    ["파일이동",           TOK_KW_FILE_MOVE],
+    ["파일복사",           TOK_KW_FILE_COPY],
+    ["파일지우기",         TOK_KW_FILE_DELETE],
+    ["파일열기",           TOK_KW_FILEOPEN],
+    ["폴더만들기",         TOK_KW_DIR_MAKE],
+    ["재생산라벨선언",     TOK_KW_REPRO_LABEL_DECL],
+    ["재생산라벨끝",       TOK_KW_REPRO_LABEL_END],
+    ["재생산라벨",         TOK_KW_REPRO_LABEL],
+    ["지식불러오기",       TOK_KW_KBANK_LOAD],
+    ["지식증거출력",       TOK_KW_KBANK_PROOF],
+    ["지식비교",           TOK_KW_KBANK_COMPARE],
+    ["지식뱅크",           TOK_KW_KBANK],
+    ["의미추론끝",         TOK_KW_SEMANTIC_INFER_END],
+    ["의미추론",           TOK_KW_SEMANTIC_INFER],
+    ["의미복원끝",         TOK_KW_SEM_RECON_END],
+    ["의미복원",           TOK_KW_SEM_RECON],
+    ["벡터화끝",           TOK_KW_VECTORIZE_END],
+    ["벡터화",             TOK_KW_VECTORIZE],
+    ["온톨로지끝",         TOK_KW_ONTOLOGY_END],
+    ["온톨로지",           TOK_KW_ONTOLOGY],
+    ["개념끝",             TOK_KW_ONT_CONCEPT_END],
+    ["개념",               TOK_KW_ONT_CONCEPT],
+    ["익명화",             TOK_KW_ONT_ANON],
+    ["MCP서버끝",          TOK_KW_KKUT_MCP_SERVER],
+    ["MCP서버",            TOK_KW_MCP_SERVER],
+    ["MCP도구끝",          TOK_KW_KKUT_MCP_TOOL],
+    ["MCP도구",            TOK_KW_MCP_TOOL],
+    ["MCP자원끝",          TOK_KW_KKUT_MCP_RESOURCE],
+    ["MCP자원",            TOK_KW_MCP_RESOURCE],
+    ["MCP프롬프트끝",      TOK_KW_KKUT_MCP_PROMPT],
+    ["MCP프롬프트",        TOK_KW_MCP_PROMPT],
+    ["이어받기",           TOK_KW_IEOBATGI],
+    ["복원지점",           TOK_KW_BOKWON],
+    ["출력없이",           TOK_KW_CHULNO],
+    ["로부터",             TOK_KW_ROBUTEO],
+    ["실패시",             TOK_KW_SILPAESI],
+    ["건너뜀",             TOK_KW_GEONNEO],
+    ["아니다",             TOK_KW_NOT],
+    ["아니면",             TOK_KW_ANIMYEON],
+    ["가속기끝",           TOK_KW_KKUT_GPU],
+    ["가속기",             TOK_KW_GPU_RO],
+    ["행렬곱",             TOK_KW_ACCEL_MATMUL],
+    ["행렬합",             TOK_KW_ACCEL_MATADD],
+    ["합성곱",             TOK_KW_ACCEL_CONV],
+    ["활성화",             TOK_KW_ACCEL_ACTIVATE],
+    ["법위반끝",           TOK_KW_KKUT_BEOPWIBAN],
+    ["법위반",             TOK_KW_BEOPWIBAN],
+    ["법령끝",             TOK_KW_KKUT_BEOPRYEONG],
+    ["법령",               TOK_KW_BEOPRYEONG],
+    ["규정끝",             TOK_KW_KKUT_GYUJEONG],
+    ["행사등록끝",         TOK_KW_KKUT_HAENGSA],
+    ["행사등록",           TOK_KW_HAENGSA_REG],
+    ["행사시작",           TOK_KW_HAENGSA_START],
+    ["행사중단",           TOK_KW_HAENGSA_STOP],
+    ["행사발생",           TOK_KW_HAENGSA_EMIT],
+    ["행사해제",           TOK_KW_HAENGSA_OFF],
+    ["신호받기끝",         TOK_KW_KKUT_SINHOBATGI],
+    ["신호받기",           TOK_KW_SINHOBATGI],
+    ["신호무시",           TOK_KW_SINHOMUSI],
+    ["신호기본",           TOK_KW_SINHOGIBON],
+    ["신호보내기",         TOK_KW_SINHOBONEGI],
+    ["간섭잠금",           TOK_KW_GANSEOB_JAMGEUM],
+    ["간섭허용",           TOK_KW_GANSEOB_HEOYONG],
+    ["간섭끝",             TOK_KW_KKUT_GANSEOB],
+    ["영텐서",             TOK_KW_ZERO_TENSOR],
+    ["일텐서",             TOK_KW_ONE_TENSOR],
+    ["함수형",             TOK_KW_HAMSUFORM],
+    ["화면3D",             TOK_KW_HWAMYEON3D],
+    ["AI연결",             TOK_KW_AI_CONNECT],
+    ["그리고",             TOK_KW_AND],
+    // 2글자 이하
+    ["정수",  TOK_KW_JEONGSU],   ["실수",  TOK_KW_SILSU],
+    ["문자",  TOK_KW_GEULJA],    ["글자",  TOK_KW_MUNJA],
+    ["논리",  TOK_KW_NOLI],      ["없음",  TOK_KW_EOPSEUM],
+    ["행렬",  TOK_KW_HAENGNYEOL],["텐서",  TOK_KW_TENSOR],
+    ["사진",  TOK_KW_SAJIN],     ["그림",  TOK_KW_GEURIM],
+    ["고정",  TOK_KW_GOJUNG],
+    ["만약",  TOK_KW_MANYAK],    ["선택",  TOK_KW_SEONTAEK],
+    ["경우",  TOK_KW_GYEONGWOO], ["그외",  TOK_KW_GEUWOI],
+    ["반복",  TOK_KW_BANBOG],    ["동안",  TOK_KW_DONGAN],
+    ["각각",  TOK_KW_GAKGAK],    ["안에",  TOK_KW_ANE],
+    ["부터",  TOK_KW_BUTEO],     ["까지",  TOK_KW_KKAJI],
+    ["멈춤",  TOK_KW_MEOMCHUM],  ["이동",  TOK_KW_IDONG],
+    ["함수",  TOK_KW_HAMSU],     ["정의",  TOK_KW_JEONGUI],
+    ["반환",  TOK_KW_BANHWAN],   ["끝냄",  TOK_KW_KKEUTNAEM],
+    ["배열",  TOK_KW_BAELYEOL],  ["사전",  TOK_KW_SAJEON],
+    ["목록",  TOK_KW_MOGLOG],    ["객체",  TOK_KW_GAEGCHE],
+    ["열거",  TOK_KW_YEOLGEEO],  ["틀",    TOK_KW_TEL],
+    ["자신",  TOK_KW_JASIN],     ["부모",  TOK_KW_BUMO],
+    ["생성",  TOK_KW_SAENGSEONG],
+    ["시도",  TOK_KW_SIDO],      ["항상",  TOK_KW_HANGSANG],
+    ["오류",  TOK_KW_ORU],
+    ["가짐",  TOK_KW_GAJIM],     ["출력",  TOK_KW_CHULRYEOK],
+    ["입력",  TOK_KW_IBRYEOK],   ["화면",  TOK_KW_HWAMYEON],
+    ["헌법",  TOK_KW_HEONBEOB],  ["법률",  TOK_KW_BEOMNYUL],
+    ["규정",  TOK_KW_GYUJEONG],  ["조항",  TOK_KW_JOHANG],
+    ["회귀",  TOK_KW_HOEGWI],    ["대체",  TOK_KW_DAECHE],
+    ["경고",  TOK_KW_GYEONGGO],  ["보고",  TOK_KW_BOGO],
+    ["중단",  TOK_KW_JUNGDAN],   ["전역",  TOK_KW_JEONYEOK],
+    ["전치",  TOK_KW_ACCEL_TRANSPOSE],
+    ["속성",  TOK_KW_ONT_PROP],  ["관계",  TOK_KW_ONT_RELATE],
+    ["질의",  TOK_KW_ONT_QUERY_BLOCK],
+    ["추론",  TOK_KW_ONT_INFER_BLOCK],
+    ["민감",  TOK_KW_ONT_SENSITIVE],
+    ["간섭",  TOK_KW_GANSEOB],
+    ["또는",  TOK_KW_OR],
+    ["참",    TOK_TRUE],         ["거짓",  TOK_FALSE],
+]
+
+// ================================================================
+//  함수 선언 (klexer.han 에서 구현)
+// ================================================================
+// 함수 렉서초기화(문자 소스코드)
+// 함수 렉서다음(목록 렉서)
+// 함수 렉서미리보기(목록 렉서)
+// 함수 토큰이름(정수 토큰종류)
+// 함수 스크립트원문읽기(목록 렉서, 문자 종료키워드)

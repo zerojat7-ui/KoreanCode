@@ -1,0 +1,258 @@
+// kc_llvm_rt.han — Kcode 런타임 내장 함수 extern 선언 / 바인딩
+// version : v1.0.0
+// §LLVM-SH Phase 8
+// 의존: kc_llvm_gen.han
+
+#포함 "kc_llvm_gen.han"
+
+// ================================================================
+//  C 표준 라이브러리 선언
+// ================================================================
+
+정의 llvm런타임C표준선언(목록 ctx):
+    // i32 printf(ptr, ...)
+    llvm외부함수선언_가변(ctx, "printf", LLTY_I32, [LLTY_PTR])
+    // i32 scanf(ptr, ...)
+    llvm외부함수선언_가변(ctx, "scanf",  LLTY_I32, [LLTY_PTR])
+    // ptr malloc(i64)
+    llvm외부함수선언(ctx, "malloc",  LLTY_PTR,  [LLTY_I64])
+    // void free(ptr)
+    llvm외부함수선언(ctx, "free",    LLTY_VOID, [LLTY_PTR])
+    // ptr realloc(ptr, i64)
+    llvm외부함수선언(ctx, "realloc", LLTY_PTR,  [LLTY_PTR, LLTY_I64])
+    // ptr memcpy(ptr, ptr, i64)
+    llvm외부함수선언(ctx, "memcpy",  LLTY_PTR,  [LLTY_PTR, LLTY_PTR, LLTY_I64])
+    // ptr memset(ptr, i32, i64)
+    llvm외부함수선언(ctx, "memset",  LLTY_PTR,  [LLTY_PTR, LLTY_I32, LLTY_I64])
+    // i64 strlen(ptr)
+    llvm외부함수선언(ctx, "strlen",  LLTY_I64,  [LLTY_PTR])
+    // ptr strcpy(ptr, ptr)
+    llvm외부함수선언(ctx, "strcpy",  LLTY_PTR,  [LLTY_PTR, LLTY_PTR])
+    // ptr strcat(ptr, ptr)
+    llvm외부함수선언(ctx, "strcat",  LLTY_PTR,  [LLTY_PTR, LLTY_PTR])
+    // i32 strcmp(ptr, ptr)
+    llvm외부함수선언(ctx, "strcmp",  LLTY_I32,  [LLTY_PTR, LLTY_PTR])
+    // i32 putchar(i32)
+    llvm외부함수선언(ctx, "putchar", LLTY_I32,  [LLTY_I32])
+    // i32 puts(ptr)
+    llvm외부함수선언(ctx, "puts",    LLTY_I32,  [LLTY_PTR])
+    // i32 getchar()
+    llvm외부함수선언(ctx, "getchar", LLTY_I32,  [])
+    // void exit(i32)
+    llvm외부함수선언(ctx, "exit",    LLTY_VOID, [LLTY_I32])
+    // double sqrt(double)
+    llvm외부함수선언(ctx, "sqrt",    LLTY_F64,  [LLTY_F64])
+    // double pow(double, double)
+    llvm외부함수선언(ctx, "pow",     LLTY_F64,  [LLTY_F64, LLTY_F64])
+    // double fabs(double)
+    llvm외부함수선언(ctx, "fabs",    LLTY_F64,  [LLTY_F64])
+    // double floor(double)
+    llvm외부함수선언(ctx, "floor",   LLTY_F64,  [LLTY_F64])
+    // double ceil(double)
+    llvm외부함수선언(ctx, "ceil",    LLTY_F64,  [LLTY_F64])
+
+// ================================================================
+//  Kcode 런타임 함수 선언 (libkc_rt.a / kc_runtime.c 에서 구현)
+// ================================================================
+
+정의 llvm런타임Kcode선언(목록 ctx):
+    // 출력 내장 함수
+    // void kc_print_i64(i64)
+    llvm외부함수선언(ctx, "kc_print_i64",   LLTY_VOID, [LLTY_I64])
+    // void kc_print_f64(double)
+    llvm외부함수선언(ctx, "kc_print_f64",   LLTY_VOID, [LLTY_F64])
+    // void kc_print_str(ptr)
+    llvm외부함수선언(ctx, "kc_print_str",   LLTY_VOID, [LLTY_PTR])
+    // void kc_print_bool(i1)
+    llvm외부함수선언(ctx, "kc_print_bool",  LLTY_VOID, [LLTY_I1])
+    // void kc_println(ptr)  — 줄바꿈 포함 출력
+    llvm외부함수선언(ctx, "kc_println",     LLTY_VOID, [LLTY_PTR])
+
+    // 입력 내장 함수
+    // ptr kc_input_str()    — 한 줄 입력 → 동적 문자열 ptr
+    llvm외부함수선언(ctx, "kc_input_str",   LLTY_PTR,  [])
+    // i64 kc_input_i64()
+    llvm외부함수선언(ctx, "kc_input_i64",   LLTY_I64,  [])
+    // double kc_input_f64()
+    llvm외부함수선언(ctx, "kc_input_f64",   LLTY_F64,  [])
+
+    // 타입 변환
+    // ptr kc_i64_to_str(i64)   — 정수 → 문자열
+    llvm외부함수선언(ctx, "kc_i64_to_str",  LLTY_PTR,  [LLTY_I64])
+    // ptr kc_f64_to_str(double)
+    llvm외부함수선언(ctx, "kc_f64_to_str",  LLTY_PTR,  [LLTY_F64])
+    // i64 kc_str_to_i64(ptr)
+    llvm외부함수선언(ctx, "kc_str_to_i64",  LLTY_I64,  [LLTY_PTR])
+    // double kc_str_to_f64(ptr)
+    llvm외부함수선언(ctx, "kc_str_to_f64",  LLTY_F64,  [LLTY_PTR])
+
+    // 문자열 연산
+    // ptr kc_str_concat(ptr, ptr)   — 문자열 + 문자열
+    llvm외부함수선언(ctx, "kc_str_concat",  LLTY_PTR,  [LLTY_PTR, LLTY_PTR])
+    // i64 kc_str_len(ptr)
+    llvm외부함수선언(ctx, "kc_str_len",     LLTY_I64,  [LLTY_PTR])
+    // i32 kc_str_cmp(ptr, ptr)
+    llvm외부함수선언(ctx, "kc_str_cmp",     LLTY_I32,  [LLTY_PTR, LLTY_PTR])
+    // ptr kc_str_slice(ptr, i64, i64)
+    llvm외부함수선언(ctx, "kc_str_slice",   LLTY_PTR,  [LLTY_PTR, LLTY_I64, LLTY_I64])
+    // i64 kc_str_find(ptr, ptr)
+    llvm외부함수선언(ctx, "kc_str_find",    LLTY_I64,  [LLTY_PTR, LLTY_PTR])
+    // ptr kc_str_repeat(ptr, i64)
+    llvm외부함수선언(ctx, "kc_str_repeat",  LLTY_PTR,  [LLTY_PTR, LLTY_I64])
+    // ptr kc_str_replace(ptr, ptr, ptr)
+    llvm외부함수선언(ctx, "kc_str_replace", LLTY_PTR,  [LLTY_PTR, LLTY_PTR, LLTY_PTR])
+    // ptr kc_str_upper(ptr)
+    llvm외부함수선언(ctx, "kc_str_upper",   LLTY_PTR,  [LLTY_PTR])
+    // ptr kc_str_lower(ptr)
+    llvm외부함수선언(ctx, "kc_str_lower",   LLTY_PTR,  [LLTY_PTR])
+    // ptr kc_str_trim(ptr)
+    llvm외부함수선언(ctx, "kc_str_trim",    LLTY_PTR,  [LLTY_PTR])
+    // i1 kc_str_starts(ptr, ptr)
+    llvm외부함수선언(ctx, "kc_str_starts",  LLTY_I1,   [LLTY_PTR, LLTY_PTR])
+    // i1 kc_str_ends(ptr, ptr)
+    llvm외부함수선언(ctx, "kc_str_ends",    LLTY_I1,   [LLTY_PTR, LLTY_PTR])
+
+    // 배열 런타임
+    // ptr kc_arr_new(i64 capacity)
+    llvm외부함수선언(ctx, "kc_arr_new",     LLTY_PTR,  [LLTY_I64])
+    // void kc_arr_push(ptr arr, i64 val)
+    llvm외부함수선언(ctx, "kc_arr_push",    LLTY_VOID, [LLTY_PTR, LLTY_I64])
+    // i64 kc_arr_get_i64(ptr arr, i64 idx)
+    llvm외부함수선언(ctx, "kc_arr_get_i64", LLTY_I64,  [LLTY_PTR, LLTY_I64])
+    // void kc_arr_set_i64(ptr arr, i64 idx, i64 val)
+    llvm외부함수선언(ctx, "kc_arr_set_i64", LLTY_VOID, [LLTY_PTR, LLTY_I64, LLTY_I64])
+    // i64 kc_arr_len(ptr arr)
+    llvm외부함수선언(ctx, "kc_arr_len",     LLTY_I64,  [LLTY_PTR])
+    // ptr kc_arr_clone(ptr arr)
+    llvm외부함수선언(ctx, "kc_arr_clone",    LLTY_PTR,  [LLTY_PTR])
+    // ptr kc_arr_slice(ptr arr, i64 start, i64 end)
+    llvm외부함수선언(ctx, "kc_arr_slice",    LLTY_PTR,  [LLTY_PTR, LLTY_I64, LLTY_I64])
+    // i64 kc_arr_contains(ptr arr, i64 val)  — 배열포함 (v0.8.0)
+    llvm외부함수선언(ctx, "kc_arr_contains", LLTY_I64,  [LLTY_PTR, LLTY_I64])
+    // i64 kc_str_contains(ptr hay, ptr needle)  — 문자열 포함 확인 (v0.9.0)
+    llvm외부함수선언(ctx, "kc_str_contains", LLTY_I64,  [LLTY_PTR, LLTY_PTR])
+    // i64 kc_arr_find(ptr arr, i64 val)  — 배열 첫 일치 인덱스 (v1.0.0)
+    llvm외부함수선언(ctx, "kc_arr_find",     LLTY_I64,  [LLTY_PTR, LLTY_I64])
+
+    // GC — 쉐도우 스택 (v0.5.0)
+    // void kc_gc_push_root(ptr* root_ptr)
+    llvm외부함수선언(ctx, "kc_gc_push_root", LLTY_VOID, [LLTY_PTR])
+    // void kc_gc_pop_root()
+    llvm외부함수선언(ctx, "kc_gc_pop_root",  LLTY_VOID, [])
+    // void kc_gc_mark(ptr)
+    llvm외부함수선언(ctx, "kc_gc_mark",      LLTY_VOID, [LLTY_PTR])
+
+    // GC / 메모리
+    // void kc_gc_init()
+    llvm외부함수선언(ctx, "kc_gc_init",     LLTY_VOID, [])
+    // void kc_gc_collect()
+    llvm외부함수선언(ctx, "kc_gc_collect",  LLTY_VOID, [])
+    // ptr kc_gc_alloc(i64 size)
+    llvm외부함수선언(ctx, "kc_gc_alloc",    LLTY_PTR,  [LLTY_I64])
+
+    // 오류 처리
+    // void kc_panic(ptr msg)    — 런타임 패닉 (종료)
+    llvm외부함수선언(ctx, "kc_panic",       LLTY_VOID, [LLTY_PTR])
+    // void kc_assert(i1 cond, ptr msg)
+    llvm외부함수선언(ctx, "kc_assert",      LLTY_VOID, [LLTY_I1, LLTY_PTR])
+
+    // 예외 처리 — setjmp/longjmp 기반  (v0.6.0)
+    // i32 kc_try_begin()   — 0=정상 진입, 비0=예외 복귀
+    llvm외부함수선언(ctx, "kc_try_begin",   LLTY_I32,  [])
+    // void kc_try_end()    — 프레임 해제
+    llvm외부함수선언(ctx, "kc_try_end",     LLTY_VOID, [])
+    // void kc_throw(ptr msg)
+    llvm외부함수선언(ctx, "kc_throw",       LLTY_VOID, [LLTY_PTR])
+    // ptr kc_catch_msg()   — 예외 메시지 반환
+    llvm외부함수선언(ctx, "kc_catch_msg",   LLTY_PTR,  [])
+
+    // 객체 런타임 — 동적 필드 맵  (v0.7.0)
+    // ptr kc_obj_new(ptr class_name)
+    llvm외부함수선언(ctx, "kc_obj_new",     LLTY_PTR,  [LLTY_PTR])
+    // void kc_obj_set(ptr obj, ptr key, i64 val)
+    llvm외부함수선언(ctx, "kc_obj_set",     LLTY_VOID, [LLTY_PTR, LLTY_PTR, LLTY_I64])
+    // i64 kc_obj_get(ptr obj, ptr key)
+    llvm외부함수선언(ctx, "kc_obj_get",     LLTY_I64,  [LLTY_PTR, LLTY_PTR])
+    // i64 kc_obj_has(ptr obj, ptr key)
+    llvm외부함수선언(ctx, "kc_obj_has",     LLTY_I64,  [LLTY_PTR, LLTY_PTR])
+
+// ================================================================
+//  Kcode 내장 함수 → 런타임 함수 이름 매핑
+// ================================================================
+
+// "출력" → 런타임 함수 이름 (인수 타입에 따라 분기)
+함수 kcode내장→런타임(문자 이름, 정수 인수타입):
+    선택 이름:
+        경우 "출력":
+            선택 인수타입:
+                경우 LLTY_I64:  반환 "kc_print_i64"
+                경우 LLTY_F64:  반환 "kc_print_f64"
+                경우 LLTY_I1:   반환 "kc_print_bool"
+                기본:            반환 "kc_print_str"
+        경우 "출력줄":
+            반환 "kc_println"
+        경우 "입력":
+            반환 "kc_input_str"
+        경우 "정수입력":
+            반환 "kc_input_i64"
+        경우 "실수입력":
+            반환 "kc_input_f64"
+        경우 "길이":
+            선택 인수타입:
+                경우 LLTY_PTR:  반환 "kc_str_len"
+                기본:            반환 "kc_arr_len"
+        경우 "문자변환":
+            반환 "kc_i64_to_str"
+        경우 "정수변환":
+            반환 "kc_str_to_i64"
+        경우 "실수변환":
+            반환 "kc_str_to_f64"
+        경우 "오류":
+            반환 "kc_panic"
+        경우 "반복문자":
+            반환 "kc_str_repeat"
+        경우 "치환":
+            반환 "kc_str_replace"
+        경우 "대문자":
+            반환 "kc_str_upper"
+        경우 "소문자":
+            반환 "kc_str_lower"
+        경우 "공백제거":
+            반환 "kc_str_trim"
+        경우 "시작확인":
+            반환 "kc_str_starts"
+        경우 "끝확인":
+            반환 "kc_str_ends"
+        경우 "포함":
+            // 인수 타입에 따라 문자열/배열 포함 분기
+            선택 인수타입:
+                경우 LLTY_PTR: 반환 "kc_str_contains"
+                기본:           반환 "kc_arr_contains"
+        경우 "찾기":
+            선택 인수타입:
+                경우 LLTY_PTR: 반환 "kc_str_find"
+                기본:           반환 "kc_arr_find"
+        경우 "자르기":
+            반환 "kc_str_slice"
+        경우 "배열복사":
+            반환 "kc_arr_clone"
+        경우 "배열슬라이스":
+            반환 "kc_arr_slice"
+        경우 "추가":
+            반환 "kc_arr_push"
+        경우 "배열포함":
+            반환 "kc_arr_contains"
+        기본:
+            반환 이름    // 이름 그대로 외부 함수로 시도
+
+// ================================================================
+//  모든 런타임 선언 일괄 등록
+// ================================================================
+
+정의 llvm런타임전체선언(목록 ctx):
+    llvm전역추가(ctx, "; ── C 표준 라이브러리 ──────────────────────")
+    llvm런타임C표준선언(ctx)
+    llvm전역추가(ctx, "")
+    llvm전역추가(ctx, "; ── Kcode 런타임 ───────────────────────────")
+    llvm런타임Kcode선언(ctx)
+    llvm전역추가(ctx, "")

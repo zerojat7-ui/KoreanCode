@@ -1,0 +1,197 @@
+// kparser.hg — Kcode 파서 헤더
+// version : v35.2.0
+// kparser.h (v22.0.0) 기반 Kcode 문법으로 재작성
+
+#포함 "klexer.hg"
+
+// ================================================================
+//  AST 노드 종류 상수
+// ================================================================
+
+// ── 최상위 ──────────────────────────────────────────
+변수 NODE_PROGRAM           = 0
+
+// ── 구문(Statement) ─────────────────────────────────
+변수 NODE_BLOCK             = 1
+변수 NODE_VAR_DECL          = 2
+변수 NODE_CONST_DECL        = 3
+변수 NODE_EXPR_STMT         = 4
+
+변수 NODE_IF                = 5
+변수 NODE_ELIF              = 6
+변수 NODE_ELSE              = 7
+
+변수 NODE_WHILE             = 8
+변수 NODE_FOR_RANGE         = 9
+변수 NODE_FOR_EACH          = 10
+
+변수 NODE_SWITCH            = 11
+변수 NODE_CASE              = 12
+변수 NODE_DEFAULT           = 13
+
+변수 NODE_FUNC_DECL         = 14
+변수 NODE_VOID_DECL         = 15
+변수 NODE_PARAM             = 16
+
+변수 NODE_RETURN            = 17
+변수 NODE_BREAK             = 18
+변수 NODE_CONTINUE          = 19
+변수 NODE_GOTO              = 20
+변수 NODE_LABEL             = 21
+
+변수 NODE_TRY               = 22
+변수 NODE_IMPORT            = 23
+변수 NODE_CLASS_DECL        = 24
+변수 NODE_RAISE             = 25
+변수 NODE_PP_STMT           = 26
+
+// ── 가속기 블록 ──────────────────────────────────────
+변수 NODE_GPU_BLOCK         = 27
+변수 NODE_GPU_OP            = 28
+
+// ── 스크립트 블록 ────────────────────────────────────
+변수 NODE_SCRIPT_PYTHON     = 29
+변수 NODE_SCRIPT_JAVA       = 30
+변수 NODE_SCRIPT_JS         = 31
+변수 NODE_SCRIPT_TS         = 32   // ★ 신규 타입스크립트
+
+// ── 계약 시스템 ──────────────────────────────────────
+변수 NODE_CONTRACT          = 33
+변수 NODE_CONSTITUTION      = 34
+변수 NODE_STATUTE           = 35
+변수 NODE_REGULATION        = 36
+변수 NODE_SANCTION          = 37
+변수 NODE_CHECKPOINT        = 38
+
+// ── 인터럽트 시스템 (v6.0.0) ─────────────────────────
+변수 NODE_SIGNAL_HANDLER    = 39
+변수 NODE_SIGNAL_CTRL       = 40
+변수 NODE_ISR_HANDLER       = 41
+변수 NODE_ISR_CTRL          = 42
+변수 NODE_EVENT_HANDLER     = 43
+변수 NODE_EVENT_CTRL        = 44
+
+// ── 표현식(Expression) ───────────────────────────────
+변수 NODE_INT_LIT           = 50
+변수 NODE_FLOAT_LIT         = 51
+변수 NODE_STRING_LIT        = 52
+변수 NODE_CHAR_LIT          = 53
+변수 NODE_BOOL_LIT          = 54
+변수 NODE_NULL_LIT          = 55
+
+변수 NODE_ARRAY_LIT         = 56
+변수 NODE_TENSOR_LIT        = 57
+변수 NODE_DICT_LIT          = 58
+변수 NODE_DICT_ENTRY        = 59
+
+변수 NODE_IDENT             = 60
+
+변수 NODE_BINARY            = 61
+변수 NODE_UNARY             = 62
+변수 NODE_ASSIGN            = 63
+변수 NODE_CALL              = 64
+변수 NODE_INDEX             = 65
+변수 NODE_MEMBER            = 66
+변수 NODE_LAMBDA            = 67
+
+// ── MCP 시스템 (v14.0.1) ─────────────────────────────
+변수 NODE_MCP_SERVER        = 70
+변수 NODE_MCP_TOOL          = 71
+변수 NODE_MCP_RESOURCE      = 72
+변수 NODE_MCP_PROMPT        = 73
+
+// ── 산업/임베디드 (v16.0.0) ──────────────────────────
+변수 NODE_TIMER_BLOCK       = 80
+변수 NODE_ROS2_BLOCK        = 81
+
+// ── 안전 규격 (v17.0.0) ──────────────────────────────
+변수 NODE_WATCHDOG_BLOCK    = 85
+변수 NODE_FAULT_TOL_BLOCK   = 86
+
+// ── 온디바이스 AI (v18.0.0) ──────────────────────────
+변수 NODE_AI_MODEL_BLOCK    = 90
+변수 NODE_TINYML_BLOCK      = 91
+변수 NODE_FEDERATED_BLOCK   = 92
+
+// ── 온톨로지 시스템 (v18.5.0) ────────────────────────
+변수 NODE_ONT_BLOCK         = 100
+변수 NODE_ONT_CONCEPT       = 101
+변수 NODE_ONT_PROP          = 102
+변수 NODE_ONT_RELATE        = 103
+변수 NODE_ONT_QUERY         = 104
+변수 NODE_ONT_INFER         = 105
+
+// ── Concept Identity / Vector Space (v22.0.0) ────────
+변수 NODE_SEMANTIC_INFER    = 110
+변수 NODE_VECTORIZE         = 111
+변수 NODE_SEM_RECON         = 112
+변수 NODE_REPRO_LABEL       = 113
+
+// ── 지식 뱅크 (Stage 24) ─────────────────────────────
+변수 NODE_KBANK             = 120
+변수 NODE_KBANK_LOAD        = 121
+변수 NODE_KBANK_COMPARE     = 122
+변수 NODE_REPRO_LABEL_DECL  = 123
+변수 NODE_KBANK_PROOF       = 124
+
+변수 NODE_COUNT             = 125
+
+// ================================================================
+//  노드 이름 목록 (디버깅용)
+// ================================================================
+변수 NODE_이름목록 = 목록 {
+    0:   "PROGRAM",
+    1:   "BLOCK",       2:  "VAR_DECL",     3:  "CONST_DECL",
+    4:   "EXPR_STMT",
+    5:   "IF",          6:  "ELIF",         7:  "ELSE",
+    8:   "WHILE",       9:  "FOR_RANGE",    10: "FOR_EACH",
+    11:  "SWITCH",      12: "CASE",         13: "DEFAULT",
+    14:  "FUNC_DECL",   15: "VOID_DECL",    16: "PARAM",
+    17:  "RETURN",      18: "BREAK",        19: "CONTINUE",
+    20:  "GOTO",        21: "LABEL",        22: "TRY",
+    23:  "IMPORT",      24: "CLASS_DECL",   25: "RAISE",
+    26:  "PP_STMT",
+    27:  "GPU_BLOCK",   28: "GPU_OP",
+    29:  "SCRIPT_PYTHON", 30: "SCRIPT_JAVA",
+    31:  "SCRIPT_JS",   32: "SCRIPT_TS",
+    33:  "CONTRACT",    34: "CONSTITUTION", 35: "STATUTE",
+    36:  "REGULATION",  37: "SANCTION",     38: "CHECKPOINT",
+    39:  "SIGNAL_HANDLER", 40: "SIGNAL_CTRL",
+    41:  "ISR_HANDLER", 42: "ISR_CTRL",
+    43:  "EVENT_HANDLER", 44: "EVENT_CTRL",
+    50:  "INT_LIT",     51: "FLOAT_LIT",    52: "STRING_LIT",
+    53:  "CHAR_LIT",    54: "BOOL_LIT",     55: "NULL_LIT",
+    56:  "ARRAY_LIT",   57: "TENSOR_LIT",   58: "DICT_LIT",
+    59:  "DICT_ENTRY",  60: "IDENT",
+    61:  "BINARY",      62: "UNARY",        63: "ASSIGN",
+    64:  "CALL",        65: "INDEX",        66: "MEMBER",
+    67:  "LAMBDA",
+    70:  "MCP_SERVER",  71: "MCP_TOOL",     72: "MCP_RESOURCE",
+    73:  "MCP_PROMPT",
+    80:  "TIMER_BLOCK", 81: "ROS2_BLOCK",
+    85:  "WATCHDOG_BLOCK", 86: "FAULT_TOL_BLOCK",
+    90:  "AI_MODEL_BLOCK", 91: "TINYML_BLOCK",
+    92:  "FEDERATED_BLOCK",
+    100: "ONT_BLOCK",   101: "ONT_CONCEPT", 102: "ONT_PROP",
+    103: "ONT_RELATE",  104: "ONT_QUERY",   105: "ONT_INFER",
+    110: "SEMANTIC_INFER", 111: "VECTORIZE",
+    112: "SEM_RECON",   113: "REPRO_LABEL",
+    120: "KBANK",       121: "KBANK_LOAD",  122: "KBANK_COMPARE",
+    123: "REPRO_LABEL_DECL", 124: "KBANK_PROOF",
+}
+
+// ================================================================
+//  파서 오류 최대 수
+// ================================================================
+변수 KCODE_PARSER_MAX_ERRORS = 64
+
+// ================================================================
+//  함수 선언 (kparser.han 에서 구현)
+// ================================================================
+// 함수 파서초기화(목록 렉서)
+// 함수 파서파싱(목록 파서)
+// 함수 노드이름(정수 노드종류)
+// 함수 노드만들기(정수 종류, 정수 줄, 정수 열)
+// 정의 노드자식추가(목록 부모, 목록 자식)
+// 정의 노드해제(목록 노드)
+// 정의 AST출력(목록 노드, 정수 깊이)
