@@ -152,7 +152,7 @@ static const KwEntry KW_TABLE[] = {
     { "\xEB\xB6\x80\xED\x84\xB0",               TOK_KW_BUTEO      }, /* 부터 */
     { "\xEA\xB9\x8C\xEC\xa7\x80",               TOK_KW_KKAJI      }, /* 까지 */
     { "\xEB\xA9\x88\xEC\xB6\xA4",               TOK_KW_MEOMCHUM   }, /* 멈춤 */
-    { "\xEA\xB1\xB4\xEB\x84\x88\xEB\x8E\x80",   TOK_KW_GEONNEO    }, /* 건너뜀 */
+    { "\xEA\xB1\xB4\xEB\x84\x88\xEB\x9C\x80",   TOK_KW_GEONNEO    }, /* 건너뜀 */
     { "\xEC\x9D\xB4\xEB\x8F\x99",               TOK_KW_IDONG      }, /* 이동 */
 
     /* 함수/정의 */
@@ -222,6 +222,7 @@ static const KwEntry KW_TABLE[] = {
     { "\xEA\xB7\x9C\xEC\xA0\x95",                                  TOK_KW_GYUJEONG         }, /* 규정     */
     { "\xED\x97\x8C\xEB\xB2\x95",                                  TOK_KW_HEONBEOB         }, /* 헌법     */
     { "\xEC\xA1\xB0\xED\x95\xAD",                                  TOK_KW_JOHANG           }, /* 조항     */
+    { "\xEA\xB7\x9C\xEC\xB9\x99",                                  TOK_KW_GYURYEOK         }, /* 규칙     */
     { "\xEC\xA0\x84\xEC\x97\xAD",                                  TOK_KW_JEONYEOK         }, /* 전역     */
     { "\xED\x9A\x8C\xEA\xB7\x80",                                  TOK_KW_HOEGWI           }, /* 회귀     */
     { "\xEB\x8C\x80\xEC\xB2\xB4",                                  TOK_KW_DAECHE           }, /* 대체     */
@@ -612,8 +613,15 @@ static Token handle_indent(Lexer *lx)
         return make_token(lx, TOK_NEWLINE, lx->src + save_pos, 0);
     }
 
-    int cur_indent = lx->indent_stack[lx->indent_top];
     lx->col = spaces + 1;
+
+    /* 연속 줄(continuation) — 스택 갱신 없이 공백만 소비하고 NEWLINE 반환 */
+    if (lx->skip_next_indent) {
+        lx->skip_next_indent = 0;
+        return make_token(lx, TOK_NEWLINE, lx->src + save_pos, 0);
+    }
+
+    int cur_indent = lx->indent_stack[lx->indent_top];
 
     if (spaces > cur_indent) {
         /* 들여쓰기 증가 */
@@ -964,24 +972,39 @@ void lexer_init(Lexer *lx, const char *src, size_t len)
     lx->indent_top    = 0;
     lx->pending_dedents = 0;
     lx->at_line_start = 1;
+    lx->bracket_depth = 0;
+    lx->last_tok_type = TOK_EOF;
+    lx->cont_indent_depth = 0;
+    lx->skip_next_indent = 0;
     lx->had_error     = 0;
 }
 
-Token lexer_next(Lexer *lx)
+static Token lexer_next_raw(Lexer *lx)
 {
-    /* ── 대기 중인 DEDENT 먼저 반환 ─────────────────────── */
+    /* ── 대기 중인 DEDENT 먼저 반환 (괄호 내부에서는 억제) ── */
     if (lx->pending_dedents > 0) {
-        lx->pending_dedents--;
-        return make_token(lx, TOK_DEDENT, lx->src + lx->pos, 0);
+        if (lx->bracket_depth == 0) {
+            lx->pending_dedents--;
+            return make_token(lx, TOK_DEDENT, lx->src + lx->pos, 0);
+        }
+        lx->pending_dedents = 0;  /* 괄호 내부: 쌓인 DEDENT 버림 */
     }
 
-    /* ── 줄 시작 들여쓰기 처리 ──────────────────────────── */
+    /* ── 줄 시작 들여쓰기 처리 (괄호 내부에서는 억제) ────── */
     if (lx->at_line_start) {
         lx->at_line_start = 0;
         lx->col = 1;
-        Token ind = handle_indent(lx);
-        if (ind.type == TOK_INDENT || ind.type == TOK_DEDENT) {
-            return ind;
+        if (lx->bracket_depth == 0) {
+            Token ind = handle_indent(lx);
+            if (ind.type == TOK_INDENT || ind.type == TOK_DEDENT) {
+                return ind;
+            }
+        } else {
+            /* 괄호 내부: 들여쓰기 공백만 건너뜀, INDENT/DEDENT 발행 안 함 */
+            while (lx->pos < lx->src_len &&
+                   (lx->src[lx->pos] == ' ' || lx->src[lx->pos] == '\t')) {
+                lx->pos++; lx->col++;
+            }
         }
         /* NEWLINE 또는 빈 줄: 계속 진행 */
     }
@@ -1016,12 +1039,14 @@ main_loop:
         lx->col = 1;
         lx->line_start_pos = (int)lx->pos;
         lx->at_line_start  = 1;
+        if (lx->bracket_depth > 0) goto main_loop;  /* 괄호 내부: NEWLINE 억제 */
         return make_token(lx, TOK_NEWLINE, lx->src + lx->pos - 1, 1);
     }
     if (c == '\n') {
         lx->pos++; lx->line++; lx->col = 1;
         lx->line_start_pos = (int)lx->pos;
         lx->at_line_start  = 1;
+        if (lx->bracket_depth > 0) goto main_loop;  /* 괄호 내부: NEWLINE 억제 */
         return make_token(lx, TOK_NEWLINE, lx->src + lx->pos - 1, 1);
     }
 
@@ -1067,13 +1092,22 @@ main_loop:
              return make_token(lx, type_, start, 1);
 
     switch (c) {
-        /* 단일 문자 구분자 */
-        SIMPLE_TOK('(', TOK_LPAREN)
-        SIMPLE_TOK(')', TOK_RPAREN)
-        SIMPLE_TOK('[', TOK_LBRACKET)
-        SIMPLE_TOK(']', TOK_RBRACKET)
-        SIMPLE_TOK('{', TOK_LBRACE)
-        SIMPLE_TOK('}', TOK_RBRACE)
+        /* 단일 문자 구분자 — 괄호는 bracket_depth 업데이트 */
+        case '(': lx->pos++; lx->col++; lx->bracket_depth++;
+                  return make_token(lx, TOK_LPAREN,   start, 1);
+        case ')': lx->pos++; lx->col++;
+                  if (lx->bracket_depth > 0) lx->bracket_depth--;
+                  return make_token(lx, TOK_RPAREN,   start, 1);
+        case '[': lx->pos++; lx->col++; lx->bracket_depth++;
+                  return make_token(lx, TOK_LBRACKET, start, 1);
+        case ']': lx->pos++; lx->col++;
+                  if (lx->bracket_depth > 0) lx->bracket_depth--;
+                  return make_token(lx, TOK_RBRACKET, start, 1);
+        case '{': lx->pos++; lx->col++; lx->bracket_depth++;
+                  return make_token(lx, TOK_LBRACE,   start, 1);
+        case '}': lx->pos++; lx->col++;
+                  if (lx->bracket_depth > 0) lx->bracket_depth--;
+                  return make_token(lx, TOK_RBRACE,   start, 1);
         SIMPLE_TOK(',', TOK_COMMA)
         SIMPLE_TOK(':', TOK_COLON)
         SIMPLE_TOK('~', TOK_TILDE)
@@ -1186,6 +1220,64 @@ main_loop:
     }
 }
 
+/* ── 이항 연산자 뒤 줄바꿈 억제 판단 ─────────────────────────── */
+static int is_continuation_op(TokenType t) {
+    switch (t) {
+        case TOK_KW_AND: case TOK_KW_OR:           /* 그리고, 또는 */
+        case TOK_PLUS:   case TOK_MINUS:            /* + -         */
+        case TOK_STAR:   case TOK_SLASH:            /* * /         */
+        case TOK_PERCENT:case TOK_STARSTAR:          /* % **        */
+        case TOK_EQEQ:   case TOK_BANGEQ:           /* == !=       */
+        case TOK_GT:     case TOK_LT:               /* > <         */
+        case TOK_GTEQ:   case TOK_LTEQ:             /* >= <=       */
+        case TOK_AMP:    case TOK_PIPE: case TOK_CARET: /* & | ^   */
+        case TOK_LTLT:   case TOK_GTGT:             /* << >>       */
+        case TOK_COMMA:                             /* ,           */
+        case TOK_LPAREN: case TOK_LBRACKET:         /* ( [         */
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+/* 공개 API: last_tok_type 추적 + 이항 연산자 뒤 NEWLINE/INDENT/DEDENT 억제 */
+Token lexer_next(Lexer *lx)
+{
+    for (;;) {
+        Token t = lexer_next_raw(lx);
+
+        /* 이항 연산자 뒤 NEWLINE 억제 (괄호 외부에서만) */
+        if (t.type == TOK_NEWLINE && lx->bracket_depth == 0
+                && is_continuation_op(lx->last_tok_type)) {
+            /* NEWLINE을 삼키고 계속 — 다음 줄 들여쓰기도 스택에 반영하지 않음 */
+            lx->skip_next_indent = 1;
+            continue;
+        }
+        /* 연산자 뒤 줄바꿈 억제로 인해 생긴 INDENT/DEDENT도 삼킴 */
+        if ((t.type == TOK_INDENT || t.type == TOK_DEDENT)
+                && lx->bracket_depth == 0
+                && is_continuation_op(lx->last_tok_type)) {
+            if (t.type == TOK_INDENT) lx->cont_indent_depth++;
+            else if (lx->cont_indent_depth > 0) lx->cont_indent_depth--;
+            else { lx->last_tok_type = t.type; return t; } /* 블록 경계는 유지 */
+            continue;
+        }
+        /* cont_indent_depth > 0 이면 대응 DEDENT 삼킴 */
+        if (t.type == TOK_DEDENT && lx->cont_indent_depth > 0) {
+            lx->cont_indent_depth--;
+            continue;
+        }
+
+        /* NEWLINE/INDENT/DEDENT는 last_tok_type을 갱신하지 않음
+         * (실제 연산자/피연산자 정보를 유지하기 위해) */
+        if (t.type != TOK_NEWLINE &&
+            t.type != TOK_INDENT  &&
+            t.type != TOK_DEDENT)
+            lx->last_tok_type = t.type;
+        return t;
+    }
+}
+
 /* ================================================================
  *  peek (미리 보기)
  * ================================================================ */
@@ -1230,7 +1322,7 @@ static const char *TOK_NAMES[TOK_COUNT] = {
     /* 계약 시스템 v4.1 */
     "KW_법령","KW_법위반","KW_복원지점","KW_전역","KW_회귀","KW_대체","KW_경고","KW_보고","KW_중단",
     /* 계약 시스템 v4.2 계층 */
-    "KW_헌법","KW_법률","KW_규정","KW_규정끝","KW_법령끝","KW_법위반끝","KW_조항",
+    "KW_헌법","KW_법률","KW_규정","KW_규정끝","KW_법령끝","KW_법위반끝","KW_조항","KW_규칙",
     /* 파일 내장 함수 */
     "KW_파일닫기","KW_파일전체읽기","KW_파일전체쓰기",
     "KW_파일줄읽기","KW_파일줄쓰기","KW_파일읽기","KW_파일쓰기",
@@ -1323,7 +1415,7 @@ char *lexer_read_raw_script(Lexer *lx, const char *end_keyword) {
     size_t      src_len = lx->src_len;
     size_t      pos     = lx->pos;
 
-    /* 공통 들여쓰기 계산 (첫 비어있지 않은 줄 기준) */
+    /* 공통 들��쓰기 계산 (첫 비어있지 않은 줄 기준) */
     size_t common_indent = SIZE_MAX;
     {
         size_t p2 = pos;
@@ -1335,13 +1427,20 @@ char *lexer_read_raw_script(Lexer *lx, const char *end_keyword) {
                 indent += (src[lp] == '\t') ? 4 : 1;
                 lp++;
             }
+            /* 끝키워드 줄 도달하면 스캔 중단 */
+            if (lp + ek_len <= src_len &&
+                memcmp(src + lp, end_keyword, ek_len) == 0) {
+                size_t aft = lp + ek_len;
+                if (aft >= src_len ||
+                    src[aft] == '\n' || src[aft] == '\r' ||
+                    src[aft] == ' '  || src[aft] == '\t' ||
+                    src[aft] == '\0') {
+                    break;
+                }
+            }
             /* 빈 줄 건너뜀 */
             if (lp < src_len && src[lp] != '\n' && src[lp] != '\r') {
-                /* 끝키워드 줄 제외 */
-                if (!(lp + ek_len <= src_len &&
-                      memcmp(src + lp, end_keyword, ek_len) == 0)) {
-                    if (indent < common_indent) common_indent = indent;
-                }
+                if (indent < common_indent) common_indent = indent;
             }
             /* 다음 줄로 */
             while (p2 < src_len && src[p2] != '\n') p2++;

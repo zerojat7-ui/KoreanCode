@@ -3127,6 +3127,116 @@ static Value builtin_str_format(Interp *interp, Value *args, int argc) {
 }
 
 /* ================================================================
+
+/* ================================================================
+ * 소켓 내장 함수 — Web IDE / 서버 통신용 (v34.9.0)
+ * ================================================================ */
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+
+/* 서버소켓열기(포트) → 소켓핸들 */
+static Value builtin_server_socket(Interp *interp, Value *args, int argc) {
+    (void)interp;
+    if (argc < 1 || args[0].type != VAL_INT)
+        return val_error("서버소켓열기(): 포트 번호 필요");
+    int port = (int)args[0].as.ival;
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return val_error("서버소켓열기(): 소켓 생성 실패");
+    int opt = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    struct sockaddr_in addr = {0};
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port        = htons((uint16_t)port);
+    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(fd); return val_error("서버소켓열기(): bind 실패 (포트 %d)", port);
+    }
+    listen(fd, 128);
+    return val_int(fd);
+}
+
+/* 소켓수락(서버핸들) → 클라이언트핸들 */
+static Value builtin_socket_accept(Interp *interp, Value *args, int argc) {
+    (void)interp;
+    if (argc < 1 || args[0].type != VAL_INT)
+        return val_error("소켓수락(): 서버 핸들 필요");
+    int fd = (int)args[0].as.ival;
+    struct sockaddr_in cli = {0};
+    socklen_t len = sizeof(cli);
+    int cfd = accept(fd, (struct sockaddr*)&cli, &len);
+    if (cfd < 0) return val_error("소켓수락(): 연결 수락 실패");
+    return val_int(cfd);
+}
+
+/* 소켓연결(호스트, 포트) → 소켓핸들 */
+static Value builtin_socket_connect(Interp *interp, Value *args, int argc) {
+    (void)interp;
+    if (argc < 2 || args[0].type != VAL_STRING || args[1].type != VAL_INT)
+        return val_error("소켓연결(): 호스트(문자), 포트(정수) 필요");
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return val_error("소켓연결(): 소켓 생성 실패");
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_port   = htons((uint16_t)args[1].as.ival);
+    inet_pton(AF_INET, args[0].as.sval, &addr.sin_addr);
+    if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(fd); return val_error("소켓연결(): 연결 실패 (%s:%d)", args[0].as.sval, (int)args[1].as.ival);
+    }
+    return val_int(fd);
+}
+
+/* 소켓읽기(핸들, 크기) → 문자열 */
+static Value builtin_socket_read(Interp *interp, Value *args, int argc) {
+    if (argc < 2 || args[0].type != VAL_INT || args[1].type != VAL_INT)
+        return val_error("소켓읽기(): 핸들, 크기 필요");
+    int fd   = (int)args[0].as.ival;
+    int size = (int)args[1].as.ival;
+    if (size <= 0 || size > 65536) size = 4096;
+    char *buf = malloc(size + 1);
+    if (!buf) return val_error("소켓읽기(): 메모리 부족");
+    ssize_t n = recv(fd, buf, size, 0);
+    if (n < 0) { free(buf); return val_error("소켓읽기(): 수신 실패"); }
+    buf[n] = '\0';
+    Value v = val_string_take(strdup(buf));
+    free(buf);
+    return v;
+}
+
+/* 소켓쓰기(핸들, 데이터) → 전송바이트수 */
+static Value builtin_socket_write(Interp *interp, Value *args, int argc) {
+    (void)interp;
+    if (argc < 2 || args[0].type != VAL_INT || args[1].type != VAL_STRING)
+        return val_error("소켓쓰기(): 핸들, 데이터(문자열) 필요");
+    int fd = (int)args[0].as.ival;
+    ssize_t n = send(fd, args[1].as.sval, strlen(args[1].as.sval), 0);
+    return val_int(n);
+}
+
+/* 소켓닫기(핸들) */
+static Value builtin_socket_close(Interp *interp, Value *args, int argc) {
+    (void)interp;
+    if (argc < 1 || args[0].type != VAL_INT)
+        return val_error("소켓닫기(): 핸들 필요");
+    close((int)args[0].as.ival);
+    return val_int(0);
+}
+
+/* 소켓주소(핸들) → IP 문자열 */
+static Value builtin_socket_addr(Interp *interp, Value *args, int argc) {
+    if (argc < 1 || args[0].type != VAL_INT)
+        return val_error("소켓주소(): 핸들 필요");
+    struct sockaddr_in addr; socklen_t len = sizeof(addr);
+    getpeername((int)args[0].as.ival, (struct sockaddr*)&addr, &len);
+    char ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
+    return val_string_take(strdup(ip));
+}
+
+/* ================================================================
  *  내장 함수 등록
  * ================================================================ */
 static void register_builtins(Interp *interp) {
@@ -3331,6 +3441,14 @@ static void register_builtins(Interp *interp) {
         { "JSON생성",       builtin_json_encode           },
         { "JSON파싱",       builtin_json_decode           },
 
+        /* 소켓 내장 함수 v34.9.0 */
+        { "서버소켓열기",  builtin_server_socket  },
+        { "소켓수락",      builtin_socket_accept  },
+        { "소켓연결",      builtin_socket_connect },
+        { "소켓읽기",      builtin_socket_read    },
+        { "소켓쓰기",      builtin_socket_write   },
+        { "소켓닫기",      builtin_socket_close   },
+        { "소켓주소",      builtin_socket_addr    },
         { NULL, NULL }
     };
     for (int i = 0; builtins[i].name; i++) {

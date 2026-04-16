@@ -203,6 +203,14 @@ static void skip_newlines(Parser *p) {
     while (check(p, TOK_NEWLINE)) parser_advance(p);
 }
 
+/* 리터럴 내부용 공백 건너뜀
+ * 렉서가 bracket_depth > 0 일 때 NEWLINE/INDENT/DEDENT를 억제하므로
+ * 파서에서는 NEWLINE만 스킵하면 충분하다 */
+static void skip_literal_ws(Parser *p) {
+    while (check(p, TOK_NEWLINE)) parser_advance(p);
+}
+
+
 /* 구문 끝 처리 (NEWLINE 또는 EOF) */
 static void consume_stmt_end(Parser *p) {
     if (check(p, TOK_NEWLINE) || check(p, TOK_EOF))
@@ -272,6 +280,8 @@ static int is_name_token(TokenType t) {
         case TOK_KW_YEOLGEEO:   /* 열거 */
         case TOK_KW_TEL:        /* 틀   */
         case TOK_KW_IDONG:      /* 이동 */
+        /* .han 소스에서 변수명으로 자주 쓰이는 키워드 */
+        case TOK_KW_JEONYEOK:   /* 전역 */
             return 1;
         default:
             return 0;
@@ -281,6 +291,10 @@ static int is_name_token(TokenType t) {
 /* 내장 호출 가능 키워드인지 확인 (출력, 입력, 오류 등) */
 static int is_callable_kw(TokenType t) {
     switch (t) {
+        /* 타입 키워드 → 변환 함수로도 사용 가능 (정수(x), 실수(x), 문자(x) 등) */
+        case TOK_KW_JEONGSU: case TOK_KW_SILSU:  case TOK_KW_MUNJA:
+        case TOK_KW_NOLI:    case TOK_KW_GEULJA: case TOK_KW_BAELYEOL:
+        case TOK_KW_SAJEON:
         /* 기존 내장 함수 */
         case TOK_KW_CHULRYEOK: case TOK_KW_CHULNO:
         case TOK_KW_IBRYEOK:   case TOK_KW_FILEOPEN:
@@ -315,6 +329,8 @@ static int is_callable_kw(TokenType t) {
         case TOK_KW_ACCEL_MATMUL:    case TOK_KW_ACCEL_MATADD:
         case TOK_KW_ACCEL_CONV:      case TOK_KW_ACCEL_ACTIVATE:
         case TOK_KW_ACCEL_TRANSPOSE:
+        /* 문자열 조작 내장 함수 */
+        case TOK_KW_DAECHE:
             return 1;
         default: return 0;
     }
@@ -332,7 +348,15 @@ static Node *parse_params(Parser *p, Node *func_node);
  *  블록 파싱: NEWLINE INDENT stmt* DEDENT
  * ================================================================ */
 static Node *parse_block(Parser *p) {
-    /* ':' 뒤에 NEWLINE 기대 */
+    /* ':' 뒤에 NEWLINE 없으면 단일 구문 인라인 블록 허용 */
+    if (!check(p, TOK_NEWLINE) && !check(p, TOK_EOF)) {
+        Node *block = node_new(NODE_BLOCK, p->current.line, p->current.col);
+        Node *s = parse_stmt(p);
+        if (s) node_add_child(block, s);
+        return block;
+    }
+
+    /* 일반 들여쓰기 블록: NEWLINE INDENT ... DEDENT */
     consume(p, TOK_NEWLINE, "':' 뒤에 줄바꿈이 필요합니다");
     skip_newlines(p);
     consume(p, TOK_INDENT, "블록이 들여쓰기로 시작해야 합니다");
@@ -452,6 +476,18 @@ static Node *parse_func_decl(Parser *p, NodeType ntype) {
     parser_advance(p);
 
     parse_params(p, n);
+
+    /* 선택적 반환 타입 어노테이션: -> 타입  예) 함수 이름(파람) -> 문자: */
+    if (check(p, TOK_MINUS)) {
+        parser_advance(p); /* '-' 소비 */
+        if (match(p, TOK_GT)) {
+            /* 타입 토큰 소비 */
+            if (is_type_kw(p->current.type) || check(p, TOK_IDENT)) {
+                parser_advance(p);
+            }
+        }
+    }
+
     consume(p, TOK_COLON, "함수 선언 뒤에 ':' 가 필요합니다");
     Node *body = parse_block(p);
     node_add_child(n, body);
@@ -500,28 +536,33 @@ static Node *parse_if(Parser *p) {
     Node *then_blk = parse_block(p);
     node_add_child(n, then_blk);
 
-    /* 아니면 만약 (elif) / 아니면 (else) */
+    /* 아니면 만약 (elif) / 아니면 (else)
+     * 인터프리터는 중첩 구조를 기대함:
+     *   NODE_IF[cond, then, NODE_ELIF[cond2, body2, NODE_ELIF[cond3, body3, NODE_ELSE[body]]]]
+     * last 포인터로 현재 체인의 끝 노드(IF 또는 ELIF)를 추적 */
+    Node *last = n;  /* elif/else 를 붙일 대상 */
     skip_newlines(p);
     while (check(p, TOK_KW_ANIMYEON)) {
         parser_advance(p);  /* 아니면 소비 */
 
         if (match(p, TOK_KW_MANYAK)) {
-            /* 아니면 만약 → elif */
+            /* 아니면 만약 → elif: last 의 children[2] 로 추가, last = elif */
             Node *elif = node_new(NODE_ELIF, p->previous.line, p->previous.col);
             Node *elif_cond = parse_expr(p);
             node_add_child(elif, elif_cond);
             consume(p, TOK_COLON, "아니면 만약 조건 뒤에 ':' 가 필요합니다");
             Node *elif_blk = parse_block(p);
             node_add_child(elif, elif_blk);
-            node_add_child(n, elif);
+            node_add_child(last, elif);
+            last = elif;
             skip_newlines(p);
         } else {
-            /* 아니면 → else */
+            /* 아니면 → else: last 의 children[2] 로 추가 */
             Node *els = node_new(NODE_ELSE, p->previous.line, p->previous.col);
             consume(p, TOK_COLON, "아니면 뒤에 ':' 가 필요합니다");
             Node *else_blk = parse_block(p);
             node_add_child(els, else_blk);
-            node_add_child(n, els);
+            node_add_child(last, els);
             break;
         }
     }
@@ -551,7 +592,21 @@ static Node *parse_for_range(Parser *p) {
     node_set_sval_tok(n, &p->current);
     parser_advance(p);
 
-    consume(p, TOK_KW_BUTEO, "'부터' 가 필요합니다");
+    /* '부터' 또는 동의어 '에서' 허용 */
+    if (!match(p, TOK_KW_BUTEO)) {
+        /* '에서' 식별자로 올 수 있음 */
+        if (check(p, TOK_IDENT)) {
+            char tbuf[32] = "";
+            token_to_str(&p->current, tbuf, sizeof(tbuf));
+            if (strcmp(tbuf, "\xEC\x97\x90\xEC\x84\x9C") == 0) { /* 에서 */
+                parser_advance(p);
+            } else {
+                parser_error(p, "'부터' 가 필요합니다");
+            }
+        } else {
+            parser_error(p, "'부터' 가 필요합니다");
+        }
+    }
     Node *start = parse_expr(p);
     node_add_child(n, start);
 
@@ -629,6 +684,7 @@ static Node *parse_switch(Parser *p) {
         skip_newlines(p);
     }
 
+    skip_newlines(p);
     consume(p, TOK_DEDENT, "선택 블록이 올바르게 닫히지 않았습니다");
     return n;
 }
@@ -709,9 +765,17 @@ static Node *parse_pp_stmt(Parser *p, TokenType pp_type) {
     /* #포함 "파일명" 또는 #포함 <파일명>
      * 지원 확장자: .han .hg .c .h .cpp .hpp .py .js .ts .java */
     if (pp_type == TOK_PP_INCLUDE) {
-        /* 따옴표 문자열 "파일명" */
+        /* 따옴표 문자열 "파일명" — 따옴표 제거 후 저장 */
         if (check(p, TOK_STRING)) {
-            node_set_sval_tok(n, &p->current);
+            const char *raw = p->current.start;
+            size_t len = p->current.length;
+            /* "..." 형태면 양쪽 따옴표 제거 */
+            if (len >= 2 && raw[0] == '"' && raw[len-1] == '"') {
+                raw++; len -= 2;
+            }
+            if (n->sval) free(n->sval);
+            n->sval = (char *)malloc(len + 1);
+            if (n->sval) { memcpy(n->sval, raw, len); n->sval[len] = '\0'; }
             parser_advance(p);
         }
         /* 꺽쇠 <파일명> — 토큰이 연산자로 분리될 수 있으므로 원문 재조합 */
@@ -851,6 +915,18 @@ static Node *parse_constitution(Parser *p) {
     Node *cond = parse_expr(p);
     node_add_child(n, cond);
 
+    /* 헌법 이름: 블록 형태 — named constitution block (INDENT/DEDENT)
+     * 예) 헌법 Kcode_CLI_헌법:
+     *         규칙 "설명"
+     *         규칙 "설명2"
+     */
+    if (match(p, TOK_COLON)) {
+        Node *body = parse_block(p);
+        node_add_child(n, body);
+        return n;
+    }
+
+    /* 단일 라인 형태: 헌법 조건, 제재 */
     if (!match(p, TOK_COMMA)) {
         parser_error(p, "헌법: 조건 뒤에 ',' 가 필요합니다");
     }
@@ -865,7 +941,7 @@ static Node *parse_constitution(Parser *p) {
 /*
  * parse_statute() — 법률 파싱 (단일 라인)
  *
- * 문법: 법률 [조건], [제재]
+ * 문법: 법률 [��건], [제재]
  *
  * NODE_STATUTE:
  *   child[0] = 조건 표현식
@@ -932,7 +1008,7 @@ static Node *parse_regulation(Parser *p) {
  *
  * 문법:
  *   법령 [함수명]:
- *       조항 [조건]
+ *       조�� [조건]
  *       [제재]
  *   법령끝
  *
@@ -1008,7 +1084,7 @@ static Node *parse_checkpoint(Parser *p) {
 
 /* ================================================================
  *  가속기 내장 연산 이름 목록 (v9.0.0)
- *  블록 본문에서 이 이름으로 시작하는 호출을 NODE_GPU_OP 로 파싱
+ *  블록 본문에�� 이 이름으로 시작하는 호출을 NODE_GPU_OP 로 파싱
  * ================================================================ */
 static const char *kc_gpu_ops[] = {
     "\xED\x96\x89\xEB\xA0\xAC\xEA\xB3\xB1",           /* 행렬곱  matmul     */
@@ -1720,7 +1796,24 @@ static Node *parse_postfix(Parser *p);
 static Node *parse_primary(Parser *p);
 
 static Node *parse_expr(Parser *p) {
-    return parse_assignment(p);
+    Node *left = parse_assignment(p);
+
+    /* 인라인 조건식: then 만약 cond 아니면 else
+     * 예) NODE_CONST_DECL 만약 상수여부 아니면 NODE_VAR_DECL */
+    if (check(p, TOK_KW_MANYAK)) {
+        int line = p->current.line, col = p->current.col;
+        parser_advance(p); /* 만약 소비 */
+        Node *cond = parse_assignment(p);
+        consume(p, TOK_KW_ANIMYEON, "'아니면' 이 필요합니다");
+        Node *alt  = parse_assignment(p);
+        Node *n = node_new(NODE_TERNARY, line, col);
+        node_add_child(n, cond);
+        node_add_child(n, left);
+        node_add_child(n, alt);
+        return n;
+    }
+
+    return left;
 }
 
 /* 대입 표현식 */
@@ -1743,7 +1836,7 @@ static Node *parse_assignment(Parser *p) {
     return left;
 }
 
-/* 논리 OR: 또는 */
+/* 논리 OR: 또는 — 연산자 뒤 줄바꿈/들여쓰기 허용 */
 static Node *parse_logic_or(Parser *p) {
     Node *left = parse_logic_and(p);
 
@@ -1751,6 +1844,7 @@ static Node *parse_logic_or(Parser *p) {
         TokenType op = p->current.type;
         int line = p->current.line, col = p->current.col;
         parser_advance(p);
+        skip_newlines(p);
         Node *right = parse_logic_and(p);
         Node *n = node_new(NODE_BINARY, line, col);
         n->op = op;
@@ -1761,7 +1855,7 @@ static Node *parse_logic_or(Parser *p) {
     return left;
 }
 
-/* 논리 AND: 그리고 */
+/* 논리 AND: 그리고 — 연산자 뒤 줄바꿈/들여쓰기 허용 */
 static Node *parse_logic_and(Parser *p) {
     Node *left = parse_logic_not(p);
 
@@ -1769,6 +1863,7 @@ static Node *parse_logic_and(Parser *p) {
         TokenType op = p->current.type;
         int line = p->current.line, col = p->current.col;
         parser_advance(p);
+        skip_newlines(p);
         Node *right = parse_logic_not(p);
         Node *n = node_new(NODE_BINARY, line, col);
         n->op = op;
@@ -1794,7 +1889,7 @@ static Node *parse_logic_not(Parser *p) {
     return parse_comparison(p);
 }
 
-/* 비교: == != > < >= <= */
+/* 비교: == != > < >= <= — 연산자 뒤 줄바꿈/들여쓰기 허용 */
 static Node *parse_comparison(Parser *p) {
     Node *left = parse_bitwise(p);
 
@@ -1806,6 +1901,7 @@ static Node *parse_comparison(Parser *p) {
             break;
         int line = p->current.line, col = p->current.col;
         parser_advance(p);
+        skip_newlines(p);
         Node *right = parse_bitwise(p);
         Node *n = node_new(NODE_BINARY, line, col);
         n->op = op;
@@ -1825,6 +1921,7 @@ static Node *parse_bitwise(Parser *p) {
         if (op != TOK_AMP && op != TOK_PIPE && op != TOK_CARET) break;
         int line = p->current.line, col = p->current.col;
         parser_advance(p);
+        skip_newlines(p);
         Node *right = parse_shift(p);
         Node *n = node_new(NODE_BINARY, line, col);
         n->op = op;
@@ -1843,6 +1940,7 @@ static Node *parse_shift(Parser *p) {
         TokenType op = p->current.type;
         int line = p->current.line, col = p->current.col;
         parser_advance(p);
+        skip_newlines(p);
         Node *right = parse_addition(p);
         Node *n = node_new(NODE_BINARY, line, col);
         n->op = op;
@@ -1853,7 +1951,7 @@ static Node *parse_shift(Parser *p) {
     return left;
 }
 
-/* 덧셈/뺄셈: + - */
+/* 덧셈/뺄셈: + - — 연산자 뒤 줄바꿈/들여쓰기 허용 */
 static Node *parse_addition(Parser *p) {
     Node *left = parse_mult(p);
 
@@ -1861,6 +1959,7 @@ static Node *parse_addition(Parser *p) {
         TokenType op = p->current.type;
         int line = p->current.line, col = p->current.col;
         parser_advance(p);
+        skip_newlines(p);
         Node *right = parse_mult(p);
         Node *n = node_new(NODE_BINARY, line, col);
         n->op = op;
@@ -1879,6 +1978,7 @@ static Node *parse_mult(Parser *p) {
         TokenType op = p->current.type;
         int line = p->current.line, col = p->current.col;
         parser_advance(p);
+        skip_newlines(p);
         Node *right = parse_power(p);
         Node *n = node_new(NODE_BINARY, line, col);
         n->op = op;
@@ -1939,23 +2039,65 @@ static Node *parse_postfix(Parser *p) {
             node_add_child(n, left);
             left = n;
         } else if (match(p, TOK_LBRACKET)) {
-            /* 인덱스 접근: 배열[인덱스] */
-            Node *n = node_new(NODE_INDEX, p->previous.line, p->previous.col);
-            node_add_child(n, left);
+            /* 인덱스 접근: 배열[인덱스] 또는 슬라이스: 배열[시작:끝] */
+            int ln = p->previous.line, cl = p->previous.col;
             Node *idx = parse_expr(p);
-            node_add_child(n, idx);
-            consume(p, TOK_RBRACKET, "']' 가 필요합니다");
-            left = n;
+            if (match(p, TOK_COLON)) {
+                /* 슬라이스: 배열[시작 : 끝] */
+                Node *n = node_new(NODE_SLICE, ln, cl);
+                node_add_child(n, left);
+                node_add_child(n, idx);
+                Node *end_idx = parse_expr(p);
+                node_add_child(n, end_idx);
+                consume(p, TOK_RBRACKET, "']' 가 필요합니다");
+                left = n;
+            } else {
+                Node *n = node_new(NODE_INDEX, ln, cl);
+                node_add_child(n, left);
+                node_add_child(n, idx);
+                consume(p, TOK_RBRACKET, "']' 가 필요합니다");
+                left = n;
+            }
         } else if (match(p, TOK_LPAREN)) {
-            /* 함수 호출: 함수(인수*) */
+            /* 함수 호출: 함수(인수*) — 다중행 인수 허용 */
             Node *n = node_new(NODE_CALL, p->previous.line, p->previous.col);
             node_add_child(n, left);
 
+            skip_literal_ws(p);
             while (!check(p, TOK_RPAREN) && !check(p, TOK_EOF)) {
                 Node *arg = parse_expr(p);
                 node_add_child(n, arg);
+                skip_literal_ws(p);
                 if (!match(p, TOK_COMMA)) break;
+                skip_literal_ws(p);
             }
+            skip_literal_ws(p);
+            consume(p, TOK_RPAREN, "')' 가 필요합니다");
+            left = n;
+        } else if (check(p, TOK_IDENT)) {
+            /* 수신자 우선 메서드 호출: expr name(args) → expr.name(args)
+             * 예) dict 포함(key), str 포함(sub) 등 */
+            Token peek = lexer_peek(p->lexer);
+            if (peek.type != TOK_LPAREN) break;
+
+            int mline = p->current.line, mcol = p->current.col;
+            Node *mem = node_new(NODE_MEMBER, mline, mcol);
+            node_set_sval_tok(mem, &p->current);
+            parser_advance(p);  /* 메서드명 소비 */
+            node_add_child(mem, left);
+
+            parser_advance(p);  /* '(' 소비 */
+            Node *n = node_new(NODE_CALL, mline, mcol);
+            node_add_child(n, mem);
+            skip_literal_ws(p);
+            while (!check(p, TOK_RPAREN) && !check(p, TOK_EOF)) {
+                Node *arg = parse_expr(p);
+                node_add_child(n, arg);
+                skip_literal_ws(p);
+                if (!match(p, TOK_COMMA)) break;
+                skip_literal_ws(p);
+            }
+            skip_literal_ws(p);
             consume(p, TOK_RPAREN, "')' 가 필요합니다");
             left = n;
         } else {
@@ -2065,8 +2207,34 @@ static Node *parse_primary(Parser *p) {
         return n;
     }
 
-    /* 식별자 */
-    if (check(p, TOK_IDENT)) {
+    /* 목록 { ... } — 타입 접두사 사전 리터럴 (사전 리터럴과 동일하게 처리) */
+    if (check(p, TOK_KW_MOGLOG)) {
+        Token peek = lexer_peek(p->lexer);
+        if (peek.type == TOK_LBRACE) {
+            parser_advance(p);  /* 목록 소비 */
+            parser_advance(p);  /* {  소비 */
+            Node *n = node_new(NODE_DICT_LIT, line, col);
+            skip_literal_ws(p);
+            while (!check(p, TOK_RBRACE) && !check(p, TOK_EOF)) {
+                Node *entry = node_new(NODE_DICT_ENTRY, p->current.line, p->current.col);
+                node_add_child(entry, parse_expr(p));
+                skip_literal_ws(p);
+                consume(p, TOK_COLON, "사전 키 뒤에 ':' 가 필요합니다");
+                skip_literal_ws(p);
+                node_add_child(entry, parse_expr(p));
+                skip_literal_ws(p);
+                node_add_child(n, entry);
+                if (!match(p, TOK_COMMA)) break;
+                skip_literal_ws(p);
+            }
+            skip_literal_ws(p);
+            consume(p, TOK_RBRACE, "'}' 가 필요합니다");
+            return n;
+        }
+    }
+
+    /* 식별자 또는 식별자로 사용되는 키워드 */
+    if (is_name_token(p->current.type)) {
         Node *n = node_new(NODE_IDENT, line, col);
         node_set_sval_tok(n, &p->current);
         parser_advance(p);
@@ -2156,28 +2324,38 @@ static Node *parse_primary(Parser *p) {
         return inner;
     }
 
-    /* 배열 리터럴: [값, 값, ...] */
+    /* 배열 리터럴: [값, 값, ...] — 다중행 허용 */
     if (match(p, TOK_LBRACKET)) {
         Node *n = node_new(NODE_ARRAY_LIT, line, col);
+        skip_literal_ws(p);
         while (!check(p, TOK_RBRACKET) && !check(p, TOK_EOF)) {
             node_add_child(n, parse_expr(p));
+            skip_literal_ws(p);
             if (!match(p, TOK_COMMA)) break;
+            skip_literal_ws(p);
         }
+        skip_literal_ws(p);
         consume(p, TOK_RBRACKET, "']' 가 필요합니다");
         return n;
     }
 
-    /* 사전 리터럴: {키: 값, ...} */
+    /* 사전 리터럴: {키: 값, ...} — 다중행 허용 */
     if (match(p, TOK_LBRACE)) {
         Node *n = node_new(NODE_DICT_LIT, line, col);
+        skip_literal_ws(p);
         while (!check(p, TOK_RBRACE) && !check(p, TOK_EOF)) {
             Node *entry = node_new(NODE_DICT_ENTRY, p->current.line, p->current.col);
             node_add_child(entry, parse_expr(p));
+            skip_literal_ws(p);
             consume(p, TOK_COLON, "사전 키 뒤에 ':' 가 필요합니다");
+            skip_literal_ws(p);
             node_add_child(entry, parse_expr(p));
+            skip_literal_ws(p);
             node_add_child(n, entry);
             if (!match(p, TOK_COMMA)) break;
+            skip_literal_ws(p);
         }
+        skip_literal_ws(p);
         consume(p, TOK_RBRACE, "'}' 가 필요합니다");
         return n;
     }
@@ -2330,6 +2508,17 @@ static Node *parse_stmt(Parser *p) {
     /* 규정 — 객체 범위 계약 (블록) */
     if (match(p, TOK_KW_GYUJEONG)) {
         return parse_regulation(p);
+    }
+
+    /* 규칙 — 헌법/계약 블록 내 규칙 선언: 규칙 "설명" */
+    if (match(p, TOK_KW_GYURYEOK)) {
+        Node *n = node_new(NODE_STRING_LIT, p->previous.line, p->previous.col);
+        if (check(p, TOK_STRING)) {
+            node_set_sval_tok(n, &p->current);
+            parser_advance(p);
+        }
+        consume_stmt_end(p);
+        return n;
     }
 
     /* 복원지점 (회귀 제재의 기준점) */
@@ -2846,7 +3035,7 @@ static Node *parse_stmt(Parser *p) {
         TokenType dtype = p->current.type;
         parser_advance(p);
 
-        if (check(p, TOK_IDENT)) {
+        if (is_name_token(p->current.type)) {
             /* 변수 선언: 자료형 이름 [= 값] */
             Node *n = node_new(NODE_VAR_DECL, line, col);
             n->dtype = dtype;
@@ -2873,6 +3062,36 @@ static Node *parse_stmt(Parser *p) {
 
         Token ident = p->current;
         parser_advance(p);
+
+        /* "변수 이름 = 값" — 타입 없는 변수 선언 패턴 */
+        if (ident.length == 6 &&
+            memcmp(ident.start, "\xEB\xB3\x80\xEC\x88\x98", 6) == 0 &&
+            is_name_token(p->current.type)) {
+            /* 변수(변수) 선언 */
+            Node *n = node_new(NODE_VAR_DECL, ident.line, ident.col);
+            node_set_sval_tok(n, &p->current);
+            parser_advance(p);
+            if (match(p, TOK_EQ)) {
+                node_add_child(n, parse_expr(p));
+            }
+            consume_stmt_end(p);
+            return n;
+        }
+
+        /* "상수 이름 = 값" — 고정(const) 선언의 한글 동의어 패턴 */
+        if (ident.length == 6 &&
+            memcmp(ident.start, "\xEC\x83\x81\xEC\x88\x98", 6) == 0 &&
+            is_name_token(p->current.type)) {
+            /* 상수 = const 선언 */
+            Node *n = node_new(NODE_CONST_DECL, ident.line, ident.col);
+            node_set_sval_tok(n, &p->current);
+            parser_advance(p);
+            if (match(p, TOK_EQ)) {
+                node_add_child(n, parse_expr(p));
+            }
+            consume_stmt_end(p);
+            return n;
+        }
 
         if (check(p, TOK_COLON)) {
             /* 다음 다음이 NEWLINE 이면 레이블 */
@@ -2956,7 +3175,7 @@ static const char *NODE_NAMES[NODE_COUNT] = {
     "BOOL_LIT", "NULL_LIT",
     "ARRAY_LIT", "DICT_LIT", "DICT_ENTRY",
     "IDENT", "BINARY", "UNARY", "ASSIGN",
-    "CALL", "INDEX", "MEMBER", "LAMBDA",
+    "TERNARY", "CALL", "INDEX", "SLICE", "MEMBER", "LAMBDA",
     /* 산업/임베디드 v16.0.0 */
     "TIMER_BLOCK", "ROS2_BLOCK",
     /* 안전 규격 v17.0.0 */
