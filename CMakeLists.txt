@@ -312,16 +312,16 @@ target_link_libraries(kcode PRIVATE libkcode)
 target_include_directories(kcode PRIVATE ${KCODE_INCLUDE_DIRS})
 
 # kcode_gen — C 코드 생성기
-add_executable(kcode_gen "${CODEGEN_DIR}/kcodegen_main.c")
-target_link_libraries(kcode_gen PRIVATE libkcode)
-target_include_directories(kcode_gen PRIVATE ${KCODE_INCLUDE_DIRS})
-target_sources(kcode_gen PRIVATE
-    "${CODEGEN_DIR}/kcodegen.c"
-    "${CODEGEN_DIR}/kcodegen_core.c"
-    "${CODEGEN_DIR}/kcodegen_expr.c"
-    "${CODEGEN_DIR}/kcodegen_stmt.c"
-    "${CODEGEN_DIR}/kcodegen_func.c"
-)
+#add_executable(kcode_gen "${CODEGEN_DIR}/kcodegen_main.c")
+#target_link_libraries(kcode_gen PRIVATE libkcode)
+#target_include_directories(kcode_gen PRIVATE ${KCODE_INCLUDE_DIRS})
+#target_sources(kcode_gen PRIVATE
+#    "${CODEGEN_DIR}/kcodegen.c"
+#    "${CODEGEN_DIR}/kcodegen_core.c"
+#    "${CODEGEN_DIR}/kcodegen_expr.c"
+#    "${CODEGEN_DIR}/kcodegen_stmt.c"
+#    "${CODEGEN_DIR}/kcodegen_func.c"
+#)
 
 # kcode_llvm — LLVM 드라이버
 if(KCODE_LLVM)
